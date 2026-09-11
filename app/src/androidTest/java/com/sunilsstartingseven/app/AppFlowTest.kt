@@ -18,6 +18,12 @@ class AppFlowTest {
     @Test fun seededRosterGeneratesAndPersistsPlayedLineup() {
         awaitText("Home")
         awaitText("10 active players")
+        compose.onNodeWithContentDescription("Settings").performClick()
+        awaitText("Data & Backup")
+        awaitText("Create Backup")
+        awaitText("Restore Backup")
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        awaitText("Home")
         compose.onNodeWithText("Games", useUnmergedTree = true).performClick()
         awaitText("New Game")
         compose.onNodeWithText("New Game").performClick()

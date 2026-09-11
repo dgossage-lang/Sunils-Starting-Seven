@@ -22,6 +22,7 @@ class Converters {
 interface PlayerDao {
     @Query("SELECT * FROM players ORDER BY isActive DESC, firstName COLLATE NOCASE, lastInitial COLLATE NOCASE, id")
     fun observeAll(): Flow<List<Player>>
+    @Query("SELECT * FROM players ORDER BY id") suspend fun all(): List<Player>
     @Query("SELECT * FROM players WHERE id = :id") suspend fun get(id: Long): Player?
     @Query("SELECT * FROM players WHERE isActive = 1 ORDER BY firstName COLLATE NOCASE, lastInitial COLLATE NOCASE, id")
     suspend fun activePlayers(): List<Player>
@@ -36,8 +37,10 @@ interface PlayerDao {
 @Dao
 interface GameDao {
     @Query("SELECT * FROM games ORDER BY gameDate DESC, roundNumber DESC, id DESC") fun observeAll(): Flow<List<Game>>
+    @Query("SELECT * FROM games ORDER BY id") suspend fun all(): List<Game>
     @Query("SELECT * FROM games WHERE id = :id") suspend fun get(id: Long): Game?
     @Insert suspend fun insert(game: Game): Long
+    @Insert suspend fun insert(games: List<Game>)
     @Query("UPDATE games SET roundNumber = :roundNumber, gameDate = :date, notes = :notes WHERE id = :id AND status = 'DRAFT'")
     suspend fun updateDraftDetails(id: Long, roundNumber: Int, date: LocalDate, notes: String): Int
     @Query("UPDATE games SET status = :status WHERE id = :id") suspend fun updateStatus(id: Long, status: GameStatus): Int
@@ -61,11 +64,13 @@ interface RosterDao {
     @Query("SELECT * FROM assignments WHERE gameId = :gameId ORDER BY rotationIndex, playerId") fun observeAssignments(gameId: Long): Flow<List<Assignment>>
     @Query("SELECT * FROM attendance WHERE gameId = :gameId ORDER BY playerId")
     suspend fun getAttendance(gameId: Long): List<GameAttendance>
+    @Query("SELECT * FROM attendance ORDER BY gameId, playerId") suspend fun allAttendance(): List<GameAttendance>
     @Transaction
     @Query("SELECT * FROM attendance WHERE gameId = :gameId ORDER BY playerId")
     suspend fun getAttendanceWithPlayers(gameId: Long): List<AttendanceWithPlayer>
     @Query("SELECT * FROM assignments WHERE gameId = :gameId ORDER BY rotationIndex, playerId")
     suspend fun getAssignments(gameId: Long): List<Assignment>
+    @Query("SELECT * FROM assignments ORDER BY gameId, rotationIndex, playerId") suspend fun allAssignments(): List<Assignment>
     @Query("SELECT * FROM assignments WHERE gameId IN (SELECT id FROM games WHERE status = 'PLAYED') ORDER BY gameId, rotationIndex, playerId")
     suspend fun playedAssignments(): List<Assignment>
     @Query("SELECT COUNT(*) FROM assignments WHERE gameId = :gameId")

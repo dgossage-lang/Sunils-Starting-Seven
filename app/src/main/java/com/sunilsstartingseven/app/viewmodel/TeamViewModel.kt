@@ -1,10 +1,15 @@
 package com.sunilsstartingseven.app.viewmodel
 
+import android.content.ContentResolver
+import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.sunilsstartingseven.app.AppContainer
+import com.sunilsstartingseven.app.data.backup.BackupException
+import com.sunilsstartingseven.app.data.backup.MAX_BACKUP_BYTES
+import com.sunilsstartingseven.app.data.backup.ValidatedBackup
 import com.sunilsstartingseven.app.data.local.*
 import com.sunilsstartingseven.app.domain.history.FairnessHistoryCalculator
 import com.sunilsstartingseven.app.domain.history.HistoryAssignment
@@ -15,8 +20,12 @@ import com.sunilsstartingseven.app.domain.history.TeamFairnessSummary
 import com.sunilsstartingseven.app.domain.model.*
 import com.sunilsstartingseven.app.domain.rotation.RotationAssignment
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.time.LocalDate
 
 data class TeamState(
@@ -28,6 +37,8 @@ data class TeamState(
     val loading: Boolean = true,
     val saving: Boolean = false,
     val error: String? = null,
+    val backupMessage: String? = null,
+    val restorePreview: ValidatedBackup? = null,
     val loadFailed: Boolean = false
 ) {
     fun game(id: Long): Game? = games.find { it.id == id }
@@ -97,6 +108,8 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
     }
 
     fun clearError() { mutableState.update { it.copy(error = null) } }
+    fun clearBackupMessage() { mutableState.update { it.copy(backupMessage = null) } }
+    fun clearRestorePreview() { mutableState.update { it.copy(restorePreview = null) } }
 
     private fun write(onSuccess: () -> Unit = {}, action: suspend () -> Unit) {
         if (state.value.saving || state.value.loading || state.value.loadFailed) return
@@ -109,7 +122,7 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
                 throw error
             } catch (error: Exception) {
                 Log.e("StartingSeven", "Unable to save local team data", error)
-                mutableState.update { it.copy(error = "Couldn't save your changes. Please try again.") }
+                mutableState.update { it.copy(error = error.userMessage("Couldn't save your changes. Please try again.")) }
             } finally {
                 mutableState.update { it.copy(saving = false) }
             }
@@ -146,6 +159,90 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
 
     fun saveManualLineup(gameId: Long, assignments: List<RotationAssignment>, onSuccess: () -> Unit) =
         write(onSuccess) { container.roster.saveManualLineup(gameId, assignments) }
+
+    fun backupFileName(now: LocalDateTime = LocalDateTime.now()): String =
+        "Sunils-Starting-Seven-Backup-${now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm"))}.json"
+
+    fun exportBackup(resolver: ContentResolver, uri: Uri) {
+        if (state.value.saving || state.value.loading || state.value.loadFailed) return
+        mutableState.update { it.copy(saving = true, error = null, backupMessage = null) }
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val json = container.backup.createBackupJson()
+                    resolver.openOutputStream(uri, "wt")?.use { stream -> stream.write(json.toByteArray(Charsets.UTF_8)) }
+                        ?: throw BackupException("The backup file could not be opened for writing.")
+                }
+                mutableState.update { it.copy(backupMessage = "Backup created") }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.e("StartingSeven", "Unable to create backup", error)
+                mutableState.update { it.copy(error = error.userMessage("Couldn't create the backup. Please try again.")) }
+            } finally {
+                mutableState.update { it.copy(saving = false) }
+            }
+        }
+    }
+
+    fun readRestorePreview(resolver: ContentResolver, uri: Uri) {
+        if (state.value.saving || state.value.loading || state.value.loadFailed) return
+        mutableState.update { it.copy(saving = true, error = null, backupMessage = null, restorePreview = null) }
+        viewModelScope.launch {
+            try {
+                val validated = withContext(Dispatchers.IO) {
+                    val text = resolver.openInputStream(uri)?.use { stream ->
+                        val bytes = stream.readCapped(MAX_BACKUP_BYTES)
+                        if (bytes.size > MAX_BACKUP_BYTES) throw BackupException("This backup file is too large to restore.")
+                        bytes.toString(Charsets.UTF_8)
+                    } ?: throw BackupException("The backup file could not be opened.")
+                    container.backup.validateJson(text)
+                }
+                mutableState.update { it.copy(restorePreview = validated) }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.e("StartingSeven", "Unable to read backup", error)
+                mutableState.update { it.copy(error = error.userMessage("Couldn't read that backup file.")) }
+            } finally {
+                mutableState.update { it.copy(saving = false) }
+            }
+        }
+    }
+
+    fun restoreBackup(onSuccess: () -> Unit) {
+        val validated = state.value.restorePreview ?: return
+        if (state.value.saving || state.value.loading || state.value.loadFailed) return
+        mutableState.update { it.copy(saving = true, error = null, backupMessage = null) }
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) { container.backup.restore(validated) }
+                mutableState.update { it.copy(restorePreview = null, backupMessage = "Backup restored") }
+                onSuccess()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.e("StartingSeven", "Unable to restore backup", error)
+                mutableState.update { it.copy(error = error.userMessage("Couldn't restore the backup. Your current data was left unchanged.")) }
+            } finally {
+                mutableState.update { it.copy(saving = false) }
+            }
+        }
+    }
+
+    private fun Exception.userMessage(fallback: String): String = if (this is BackupException) message ?: fallback else fallback
+
+    private fun java.io.InputStream.readCapped(maxBytes: Int): ByteArray {
+        val output = java.io.ByteArrayOutputStream()
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        while (true) {
+            val read = read(buffer)
+            if (read == -1) break
+            output.write(buffer, 0, read)
+            if (output.size() > maxBytes) break
+        }
+        return output.toByteArray()
+    }
 
     companion object {
         fun factory(container: AppContainer): ViewModelProvider.Factory = object : ViewModelProvider.Factory {

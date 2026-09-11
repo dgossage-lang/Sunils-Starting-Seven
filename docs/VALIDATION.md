@@ -1,5 +1,55 @@
 # Validation record
 
+## Prompt 006 validation
+
+Validated on 12 September 2026 on Windows, using the existing API 35 `StartingSevenApi35` emulator for instrumentation and manual Storage Access Framework checks.
+
+### Commands and results
+
+| Exact command | Final result |
+| --- | --- |
+| `.\gradlew.bat test --console=plain` | PASS - 54 JVM/Robolectric tests: 5 backup, 18 domain, 5 fairness-history, 5 lineup-editing, 13 persistence and 8 rotation-engine tests. |
+| `.\gradlew.bat test assembleDebug lint --console=plain` | PASS - JVM tests, debug APK build and lint completed. Lint reported 0 errors and 21 advisory warnings. |
+| `$env:ANDROID_SERIAL='emulator-5554'; .\gradlew.bat connectedDebugAndroidTest --console=plain` | PASS - one Compose instrumentation flow on `StartingSevenApi35`, including the Home gear Settings entry point and Data & Backup actions. |
+
+The emulator package clear command printed `Failed` before the passing instrumentation run because the package was not installed yet; Gradle installed the app and test APKs and the connected test task completed successfully.
+
+### Backup and restore coverage
+
+- Version is now `0.6.0` with `versionCode 6`.
+- Data & Backup is reachable from the Home gear Settings screen and is not a bottom-navigation destination.
+- Create Backup uses Android Storage Access Framework `CreateDocument` with MIME type `application/json` and a suggested `Sunils-Starting-Seven-Backup-YYYY-MM-DD_HH-mm.json` filename.
+- Restore Backup uses Android Storage Access Framework `OpenDocument`, reads the file with a size cap, validates it before mutation, shows a current-device versus backup preview, and requires destructive confirmation.
+- Restore is replace semantics, not merge. It transactionally replaces players, games, attendance and assignments while preserving IDs and saved played-lineup history.
+- The backup format contains `format = sunils-starting-seven-backup`, `backupVersion = 1`, ISO-8601 `createdAt` with offset, `appVersion`, `databaseSchemaVersion = 1`, `players`, `games`, `attendance` and `assignments`.
+- Invalid JSON, wrong format, future backup version, broken references, duplicate IDs and invalid roster structure are rejected before database mutation.
+- Export is read-only. Restore marks the current development seed version after success so a later app restart does not wipe restored data.
+- No broad storage permission and no Internet permission were added. The merged manifest contains no `INTERNET`, `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` or `MANAGE_EXTERNAL_STORAGE` permission.
+
+### Manual emulator validation
+
+Manual inspection on `emulator-5554` confirmed Home has only four bottom tabs: Home, Team, Games and Fairness, with Settings opened by the gear icon. The Settings screen showed app version `0.6.0`, Data & Backup, Create Backup, Restore Backup and the backup privacy note.
+
+The Create Backup flow opened the Android DocumentsUI Save picker in Downloads with the generated filename. The saved file was pulled from the emulator as `verification/prompt006-backup.json`; it contained the portable format marker, backup version `1`, app version `0.6.0`, schema version `1`, players, games, attendance and assignments arrays, and no visible local machine paths or device/account identifiers.
+
+The Restore Backup flow opened the Android document picker, selected the saved JSON file, showed the restore preview, displayed the destructive confirmation dialog, and returned to Home after restore with 10 active players. Evidence screenshots are stored under `verification/`, including `prompt006-settings.png`, `prompt006-create-picker2.png`, `prompt006-restore-preview.png`, `prompt006-restore-confirm.png` and `prompt006-restore-complete.png`.
+
+### Database and build outputs
+
+No Room schema change was made. Database version remains 1; no migration was introduced.
+
+Debug APK:
+
+```text
+C:\Users\Drew\Documents\GitHub\Projects\12 - Sunil's Starting Seven\app\build\outputs\apk\debug\app-debug.apk
+```
+
+Debug APK SHA-256:
+
+```text
+F24705B522504B7366EF18D0D46725A2B028D49FFB433102387726EB629C52AA
+```
+
 ## Prompt 005 validation
 
 Validated on 12 September 2026 on Windows, using the existing API 35 `StartingSevenApi35` emulator for instrumentation.
@@ -234,4 +284,3 @@ Lint reports **0 errors and 19 warnings**. These concern newer dependency/SDK/Gr
 Runtime verification used API 35, not a physical device or API 26/36 device. Other manufacturer icon masks and device layouts have not been exhaustively exercised. The final navigation-only colour change was rebuilt, unit-tested, linted and visually checked; the earlier end-to-end test covers the unchanged functional flow.
 
 No core Prompt 001 feature is intentionally deferred. Attendance workflows, fairness/rotation generation, lineup editing, statistics and backup/restore remain out of scope. The user-selected workspace folder is retained; Gradle project, package, resource and GitHub repository identifiers use safe names.
-

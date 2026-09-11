@@ -2,9 +2,9 @@
 
 A lightweight Android youth soccer roster app, built for a coach beside the pitch. Local-first, offline, and intended to help produce fair player rotations from attendance and playing history.
 
-**Version 0.5.0 (versionCode 5)** — development build.
+**Version 0.6.0 (versionCode 6)** — development build.
 
-No backend, login, analytics, tracking or internet permission. Players, games, attendance and generated rosters stay in the local Room database. Android cloud backup and device transfer are disabled; uninstalling or clearing app storage removes data. Backup/restore is planned, not yet implemented.
+No backend, login, analytics, tracking or internet permission. Players, games, attendance and generated rosters stay in the local Room database. Android cloud backup and device transfer are disabled. Coaches can create and restore local JSON backup files through Android's document picker without broad storage permissions.
 
 ## Current status
 
@@ -36,15 +36,18 @@ Implemented:
 - Room database, repositories and lifecycle-aware Coroutines / Flow state.
 - Typed attendance, assignments, playing positions and position families.
 - DataStore Preferences foundation for team preferences and the one-time development seed version.
+- Settings screen reachable from the Home gear, with Data & Backup actions kept out of the bottom navigation.
+- Local JSON backup export through Android Storage Access Framework CreateDocument, with a portable `sunils-starting-seven-backup` format covering players, games, attendance and assignments.
+- Restore backup flow through Android Storage Access Framework OpenDocument, including pre-restore validation, preview, confirmation and transactional replace semantics.
 - Local Poppins fonts, adaptive launcher icon and Android splash screen without an artificial delay.
 
 Only Played games contribute to historical fairness. Draft, Ready and Cancelled games are excluded, and Away attendance is visible so absences do not make a player look unfairly behind.
 
-Planned later: JSON backup/restore, cloud backup, sharing/export and notifications.
+Planned later: cloud backup, sharing/export conveniences and notifications.
 
 ## Development seed
 
-This development build intentionally performs a one-time seed reset. If the stored `development_seed_version` is below `1`, the app transactionally clears assignments, attendance, games and players, inserts the ten original first-name-only players, then records seed version `1` in DataStore. Subsequent launches do not wipe data again. This mechanism is for the development milestone and can be removed cleanly in a future release.
+This development build intentionally performs a one-time seed reset. If the stored `development_seed_version` is below `1`, the app transactionally clears assignments, attendance, games and players, inserts the ten original first-name-only players, then records seed version `1` in DataStore. Subsequent launches do not wipe data again. A successful backup restore records the current development seed version after replacing the database, so restored user data is not wiped by the seed on the next app start. This mechanism is for the development milestone and can be removed cleanly in a future release.
 
 The seed creates player records only. It does not create fake games, fake historical assignments or fake fairness history.
 
@@ -69,6 +72,12 @@ The Fairness tab derives its dashboard from the same persisted historical truth 
 
 Participation labels use active rotations per attended Played game, rather than raw lifetime totals, so a player who missed matches is compared by opportunity rate. The app waits for at least three attended Played games before showing stronger labels such as Balanced, Needs opportunity or Slightly ahead; earlier records show as Building history. Exact-position and role-family summaries use the seven field positions and their families: GK, DEF, WING, MID and ATT.
 
+## Local backup and restore
+
+The Settings screen is opened from the Home gear so Data & Backup stays separate from the main coaching tabs. Create Backup launches Android's document picker with MIME type `application/json` and a suggested filename like `Sunils-Starting-Seven-Backup-YYYY-MM-DD_HH-mm.json`. Restore Backup launches the document picker for JSON/text files, validates the selected file before changing data, shows a preview of the current device versus the backup, and requires a destructive confirmation.
+
+The JSON format is portable and explicit: `format`, `backupVersion`, `createdAt`, `appVersion`, `databaseSchemaVersion`, `players`, `games`, `attendance` and `assignments`. It does not include Android DataStore internals, the development seed marker, local file paths, device identifiers or account identifiers. Restore is replace semantics, not merge: players, games, attendance and assignments are replaced in one Room transaction while preserving IDs and history. Invalid JSON, wrong format, future backup versions, duplicate IDs and broken references are rejected before mutation.
+
 ## Build
 
 One application module: `app`. Project identifier: `SunilsStartingSeven`; package: `com.sunilsstartingseven.app`.
@@ -79,7 +88,7 @@ One application module: `app`. Project identifier: `SunilsStartingSeven`; packag
 - Gradle 9.6.0 wrapper with pinned distribution checksum.
 - Android Gradle Plugin 9.2.1, Kotlin Compose plugin 2.4.20, KSP 2.3.12.
 - Stable Compose BOM 2026.03.00 selected for compileSdk 36 compatibility.
-- Navigation Compose, Room 2.8.4, DataStore Preferences, lifecycle ViewModels and Coroutines / Flow.
+- Navigation Compose, Room 2.8.4, DataStore Preferences, Kotlinx Serialization JSON, lifecycle ViewModels and Coroutines / Flow.
 
 On Windows:
 
@@ -94,9 +103,9 @@ Debug APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Tests
 
-`test` runs JVM domain tests, the rotation-engine regression suite and Robolectric persistence tests against a file-backed Room database. Coverage includes validation, first-name-only display, the one-time seed, repository persistence, attendance behavior, roster structural validation, 7–12 player generation, Away players, transition constraints, reversed-order tie breaking, historical deficit influence, 17-round all-present balance and absence simulation.
+`test` runs JVM domain tests, the rotation-engine regression suite and Robolectric persistence/backup tests against a file-backed Room database. Coverage includes validation, first-name-only display, the one-time seed, repository persistence, backup round-trip/restore rejection/seed safety/future-ID behavior, attendance behavior, roster structural validation, 7–12 player generation, Away players, transition constraints, reversed-order tie breaking, historical deficit influence, 17-round all-present balance and absence simulation.
 
-The Compose instrumentation test needs a fresh disposable emulator/app installation. It verifies the seeded roster, creates Round 1, marks Nick Away, generates fair rotations, switches rotation, marks the game Played, verifies the played roster survives activity recreation, opens the Fairness tab and opens Nick's Player History with the Away game row.
+The Compose instrumentation test needs a fresh disposable emulator/app installation. It verifies the seeded roster, opens Settings from the Home gear, checks the Data & Backup actions, creates Round 1, marks Nick Away, generates fair rotations, switches rotation, marks the game Played, verifies the played roster survives activity recreation, opens the Fairness tab and opens Nick's Player History with the Away game row.
 
 See [validation record](docs/VALIDATION.md) for actual commands and results.
 

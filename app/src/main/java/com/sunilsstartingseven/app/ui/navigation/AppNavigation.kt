@@ -1,6 +1,8 @@
 package com.sunilsstartingseven.app.ui.navigation
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -8,11 +10,13 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -24,6 +28,7 @@ import com.sunilsstartingseven.app.ui.screens.games.*
 import com.sunilsstartingseven.app.ui.screens.fairness.FairnessScreen
 import com.sunilsstartingseven.app.ui.screens.fairness.PlayerHistoryScreen
 import com.sunilsstartingseven.app.ui.screens.home.HomeScreen
+import com.sunilsstartingseven.app.ui.screens.settings.SettingsScreen
 import com.sunilsstartingseven.app.ui.screens.team.*
 import com.sunilsstartingseven.app.ui.theme.Space
 import com.sunilsstartingseven.app.viewmodel.TeamViewModel
@@ -33,10 +38,17 @@ import com.sunilsstartingseven.app.viewmodel.TeamViewModel
 fun AppNavigation(viewModel: TeamViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val nav = rememberNavController()
+    val context = LocalContext.current
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: "home"
     val topLevel = route in listOf("home", "team", "games", "fairness")
     val snackbars = remember { SnackbarHostState() }
+    val createBackupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) viewModel.exportBackup(context.contentResolver, uri)
+    }
+    val restoreBackupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) viewModel.readRestorePreview(context.contentResolver, uri)
+    }
     fun navigateTop(destination: String) {
         nav.navigate(destination) {
             popUpTo("home") { saveState = true }
@@ -44,8 +56,9 @@ fun AppNavigation(viewModel: TeamViewModel) {
             restoreState = true
         }
     }
-    LaunchedEffect(state.error, topLevel) {
-        if (topLevel && !state.loadFailed) state.error?.let { snackbars.showSnackbar(it); viewModel.clearError() }
+    LaunchedEffect(state.error, state.backupMessage) {
+        if (!state.loadFailed) state.error?.let { snackbars.showSnackbar(it); viewModel.clearError() }
+        state.backupMessage?.let { snackbars.showSnackbar(it); viewModel.clearBackupMessage() }
     }
     BackHandler(state.saving) { /* Keep the save destination alive until persistence completes. */ }
     Scaffold(
@@ -55,7 +68,11 @@ fun AppNavigation(viewModel: TeamViewModel) {
                 navigationIcon = {
                     if (topLevel) Image(painterResource(R.drawable.logo), null, Modifier.padding(start = Space.Normal, end = Space.Small).size(36.dp))
                     else IconButton({ if (!state.saving) { viewModel.clearError(); nav.popBackStack() } }, enabled = !state.saving) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
-                }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background))
+                },
+                actions = {
+                    if (route == "home") IconButton({ nav.navigate("settings") }, enabled = !state.saving) { Icon(Icons.Outlined.Settings, "Settings") }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background))
         },
         bottomBar = {
             if (topLevel) NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
@@ -103,6 +120,15 @@ fun AppNavigation(viewModel: TeamViewModel) {
                     }
                     composable("games") { GamesScreen(state.games, state.games.associate { it.id to state.attendanceSummary(it.id) }, { nav.navigate("game/new") }) { nav.navigate("game/${it.id}") } }
                     composable("fairness") { FairnessScreen(state.fairness) { nav.navigate("player/$it/history") } }
+                    composable("settings") {
+                        SettingsScreen(
+                            state = state,
+                            onCreateBackup = { createBackupLauncher.launch(viewModel.backupFileName()) },
+                            onRestoreBackup = { restoreBackupLauncher.launch(arrayOf("application/json", "text/*", "application/octet-stream")) },
+                            onConfirmRestore = { viewModel.restoreBackup { nav.popBackStack("home", inclusive = false) } },
+                            onCancelRestore = viewModel::clearRestorePreview
+                        )
+                    }
                     composable("player/new") {
                         PlayerForm(false, "", "", state.saving, state.error,
                             { first, last -> viewModel.savePlayer(null, first, last) { nav.popBackStack() } },
@@ -189,6 +215,7 @@ private fun screenTitle(route: String, topLevel: Boolean): String = when {
     topLevel -> "Sunil’s Starting Seven"
     route == "game/new" -> "New game"
     route == "player/new" -> "New player"
+    route == "settings" -> "Settings"
     route.contains("/history") -> "Player history"
     route.contains("/edit") && route.startsWith("player/") -> "Edit player"
     route.contains("/lineup") -> "Lineup"
