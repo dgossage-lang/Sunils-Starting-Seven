@@ -48,7 +48,7 @@ fun AppNavigation(viewModel: TeamViewModel) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbars) },
         topBar = {
-            TopAppBar(title = { Text(if (topLevel) "Sunil’s Starting Seven" else if (route == "game/new") "New game" else "Player", style = MaterialTheme.typography.titleMedium) },
+            TopAppBar(title = { Text(screenTitle(route, topLevel), style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     if (topLevel) Image(painterResource(R.drawable.logo), null, Modifier.padding(start = Space.Normal, end = Space.Small).size(36.dp))
                     else IconButton({ if (!state.saving) { viewModel.clearError(); nav.popBackStack() } }, enabled = !state.saving) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
@@ -82,9 +82,9 @@ fun AppNavigation(viewModel: TeamViewModel) {
                     Button(viewModel::retryLoad) { Text("Retry") }
                 }
                 else -> NavHost(nav, startDestination = "home") {
-                    composable("home") { HomeScreen(state, { navigateTop("team") }, { nav.navigate("game/new") }) }
+                    composable("home") { HomeScreen(state, { navigateTop("team") }, { nav.navigate("game/new") }, { nav.navigate("game/${it.id}") }) }
                     composable("team") { TeamScreen(state.players, state.saving, { nav.navigate("player/0") }, { nav.navigate("player/${it.id}") }, viewModel::setActive) }
-                    composable("games") { GamesScreen(state.games) { nav.navigate("game/new") } }
+                    composable("games") { GamesScreen(state.games, state.games.associate { it.id to state.attendanceSummary(it.id) }, { nav.navigate("game/new") }) { nav.navigate("game/${it.id}") } }
                     composable("player/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStack ->
                         val id = backStack.arguments?.getLong("id") ?: 0L
                         val player = state.players.find { it.id == id }
@@ -93,12 +93,68 @@ fun AppNavigation(viewModel: TeamViewModel) {
                             { viewModel.clearError(); nav.popBackStack() })
                     }
                     composable("game/new") {
-                        GameForm(state.saving, state.error,
-                            { round, date, notes -> viewModel.createGame(round, date, notes) { nav.popBackStack(); navigateTop("games") } },
-                            { viewModel.clearError(); nav.popBackStack() })
+                        GameForm(
+                            busy = state.saving,
+                            error = state.error,
+                            onSave = { round, date, notes -> viewModel.createGame(round, date, notes) { nav.popBackStack(); navigateTop("games") } },
+                            onCancel = { viewModel.clearError(); nav.popBackStack() }
+                        )
+                    }
+                    composable("game/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStack ->
+                        val id = backStack.arguments?.getLong("id") ?: 0L
+                        val game = state.game(id)
+                        if (game == null) MissingGame()
+                        else GameDetailScreen(
+                            game = game,
+                            attendance = state.attendanceFor(id),
+                            missingPlayers = state.missingActivePlayersFor(id),
+                            busy = state.saving,
+                            onInitialize = { viewModel.initializeAttendance(id) },
+                            onAttendance = { playerId, status -> viewModel.setAttendance(id, playerId, status) },
+                            onAddMissing = { viewModel.addMissingActivePlayers(id) },
+                            onEdit = { nav.navigate("game/$id/edit") },
+                            onLineup = { nav.navigate("game/$id/lineup") }
+                        )
+                    }
+                    composable("game/{id}/edit", arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStack ->
+                        val id = backStack.arguments?.getLong("id") ?: 0L
+                        val game = state.game(id)
+                        if (game == null) MissingGame()
+                        else GameForm(
+                            busy = state.saving,
+                            error = state.error,
+                            initialRound = game.roundNumber,
+                            initialDate = game.gameDate,
+                            initialNotes = game.notes,
+                            title = "Edit game",
+                            onSave = { round, date, notes -> viewModel.updateGame(id, round, date, notes) { nav.popBackStack() } },
+                            onCancel = { viewModel.clearError(); nav.popBackStack() }
+                        )
+                    }
+                    composable("game/{id}/lineup", arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStack ->
+                        val id = backStack.arguments?.getLong("id") ?: 0L
+                        val game = state.game(id)
+                        if (game == null) MissingGame()
+                        else LineupScreen(game, state.attendanceFor(id), state.assignmentsFor(id))
                     }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun MissingGame() {
+    Box(Modifier.fillMaxSize().padding(Space.Large), contentAlignment = Alignment.Center) {
+        Text("This game is no longer available.", style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
+private fun screenTitle(route: String, topLevel: Boolean): String = when {
+    topLevel -> "Sunil’s Starting Seven"
+    route == "game/new" -> "New game"
+    route.contains("/lineup") -> "Lineup"
+    route.contains("/edit") -> "Edit game"
+    route.startsWith("game/") -> "Game setup"
+    else -> "Player"
 }

@@ -89,6 +89,89 @@ class PersistenceTest {
         assertTrue(db.gameDao().observeAll().first().isEmpty())
     }
 
+    @Test fun attendanceInitializesActivePlayersOnlyAndDefaultsAvailable() = runBlocking {
+        val active = (1..8).map { db.playerDao().insert(Player(firstName = "Player$it", lastInitial = "A")) }
+        val inactive = db.playerDao().insert(Player(firstName = "Inactive", lastInitial = "I", isActive = false))
+        val game = db.gameDao().insert(Game(roundNumber = 2, gameDate = LocalDate.now()))
+        val roster = RosterRepository(db)
+
+        roster.initializeAttendance(game)
+        val attendance = db.rosterDao().observeAttendance(game).first()
+
+        assertEquals(8, attendance.size)
+        assertFalse(attendance.any { it.playerId == inactive })
+        assertEquals(active.toSet(), attendance.map { it.playerId }.toSet())
+        assertTrue(attendance.all { it.status == AttendanceStatus.AVAILABLE })
+    }
+
+    @Test fun attendanceInitializationIsIdempotentAndDoesNotResetAway() = runBlocking {
+        val mason = db.playerDao().insert(Player(firstName = "Mason", lastInitial = "G"))
+        val lucas = db.playerDao().insert(Player(firstName = "Lucas", lastInitial = "T"))
+        val game = db.gameDao().insert(Game(roundNumber = 3, gameDate = LocalDate.now()))
+        val roster = RosterRepository(db)
+
+        roster.initializeAttendance(game)
+        roster.setAttendance(game, lucas, AttendanceStatus.AWAY)
+        roster.initializeAttendance(game)
+        val attendance = db.rosterDao().observeAttendance(game).first()
+
+        assertEquals(2, attendance.size)
+        assertEquals(AttendanceStatus.AVAILABLE, attendance.single { it.playerId == mason }.status)
+        assertEquals(AttendanceStatus.AWAY, attendance.single { it.playerId == lucas }.status)
+    }
+
+    @Test fun attendanceIsIndependentPerGame() = runBlocking {
+        val player = db.playerDao().insert(Player(firstName = "Mason", lastInitial = "G"))
+        val round4 = db.gameDao().insert(Game(roundNumber = 4, gameDate = LocalDate.now()))
+        val round5 = db.gameDao().insert(Game(roundNumber = 5, gameDate = LocalDate.now().plusDays(7)))
+        val roster = RosterRepository(db)
+
+        roster.initializeAttendance(round4)
+        roster.initializeAttendance(round5)
+        roster.setAttendance(round4, player, AttendanceStatus.AWAY)
+
+        assertEquals(AttendanceStatus.AWAY, db.rosterDao().observeAttendance(round4).first().single().status)
+        assertEquals(AttendanceStatus.AVAILABLE, db.rosterDao().observeAttendance(round5).first().single().status)
+    }
+
+    @Test fun initializedSnapshotSurvivesTeamChangesAndSupportsDeliberateMissingAdd() = runBlocking {
+        val firstSeven = (1..7).map { db.playerDao().insert(Player(firstName = "Player$it", lastInitial = "A")) }
+        val game = db.gameDao().insert(Game(roundNumber = 6, gameDate = LocalDate.now()))
+        val roster = RosterRepository(db)
+
+        roster.initializeAttendance(game)
+        db.playerDao().setActive(firstSeven.last(), false)
+        val latePlayer = db.playerDao().insert(Player(firstName = "Late", lastInitial = "L"))
+
+        assertEquals(firstSeven.toSet(), db.rosterDao().observeAttendance(game).first().map { it.playerId }.toSet())
+        assertEquals(listOf(latePlayer), roster.missingActivePlayers(game).map { it.id })
+
+        roster.addMissingActivePlayers(game)
+        roster.addMissingActivePlayers(game)
+
+        val updated = db.rosterDao().observeAttendance(game).first()
+        assertEquals(8, updated.size)
+        assertEquals(1, updated.count { it.playerId == latePlayer })
+
+        val futureGame = db.gameDao().insert(Game(roundNumber = 7, gameDate = LocalDate.now().plusDays(7)))
+        roster.initializeAttendance(futureGame)
+        val futurePlayers = db.rosterDao().observeAttendance(futureGame).first().map { it.playerId }.toSet()
+        assertTrue(latePlayer in futurePlayers)
+        assertFalse(firstSeven.last() in futurePlayers)
+    }
+
+    @Test fun attendanceSurvivesDatabaseReopen() = runBlocking {
+        val player = db.playerDao().insert(Player(firstName = "Lucas", lastInitial = "T"))
+        val game = db.gameDao().insert(Game(roundNumber = 8, gameDate = LocalDate.now()))
+        val roster = RosterRepository(db)
+        roster.initializeAttendance(game)
+        roster.setAttendance(game, player, AttendanceStatus.AWAY)
+        db.close()
+        db = open()
+
+        assertEquals(AttendanceStatus.AWAY, db.rosterDao().observeAttendance(game).first().single().status)
+    }
+
     private suspend fun assertFails(block: suspend () -> Unit) {
         var failed = false
         try { block() } catch (_: Exception) { failed = true }

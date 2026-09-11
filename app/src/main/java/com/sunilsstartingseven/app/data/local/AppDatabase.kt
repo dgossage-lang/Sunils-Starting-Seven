@@ -23,6 +23,8 @@ interface PlayerDao {
     @Query("SELECT * FROM players ORDER BY isActive DESC, firstName COLLATE NOCASE, lastInitial COLLATE NOCASE, id")
     fun observeAll(): Flow<List<Player>>
     @Query("SELECT * FROM players WHERE id = :id") suspend fun get(id: Long): Player?
+    @Query("SELECT * FROM players WHERE isActive = 1 ORDER BY firstName COLLATE NOCASE, lastInitial COLLATE NOCASE, id")
+    suspend fun activePlayers(): List<Player>
     @Insert suspend fun insert(player: Player): Long
     @Query("UPDATE players SET firstName = :firstName, lastInitial = :lastInitial WHERE id = :id")
     suspend fun updateName(id: Long, firstName: String, lastInitial: String): Int
@@ -34,13 +36,34 @@ interface GameDao {
     @Query("SELECT * FROM games ORDER BY gameDate DESC, roundNumber DESC, id DESC") fun observeAll(): Flow<List<Game>>
     @Query("SELECT * FROM games WHERE id = :id") suspend fun get(id: Long): Game?
     @Insert suspend fun insert(game: Game): Long
+    @Query("UPDATE games SET roundNumber = :roundNumber, gameDate = :date, notes = :notes WHERE id = :id AND status = 'DRAFT'")
+    suspend fun updateDraftDetails(id: Long, roundNumber: Int, date: LocalDate, notes: String): Int
 }
 
 @Dao
 interface RosterDao {
     @Query("SELECT * FROM attendance WHERE gameId = :gameId ORDER BY playerId") fun observeAttendance(gameId: Long): Flow<List<GameAttendance>>
+    @Transaction
+    @Query("SELECT * FROM attendance ORDER BY gameId, playerId")
+    fun observeAllAttendanceWithPlayers(): Flow<List<AttendanceWithPlayer>>
+    @Transaction
+    @Query("SELECT * FROM attendance WHERE gameId = :gameId ORDER BY playerId")
+    fun observeAttendanceWithPlayers(gameId: Long): Flow<List<AttendanceWithPlayer>>
+    @Query("SELECT COUNT(*) FROM attendance WHERE gameId = :gameId")
+    suspend fun attendanceCount(gameId: Long): Int
+    @Query("SELECT * FROM players WHERE isActive = 1 AND id NOT IN (SELECT playerId FROM attendance WHERE gameId = :gameId) ORDER BY firstName COLLATE NOCASE, lastInitial COLLATE NOCASE, id")
+    suspend fun activePlayersMissingFromAttendance(gameId: Long): List<Player>
     @Query("SELECT * FROM assignments WHERE gameId = :gameId ORDER BY rotationIndex, playerId") fun observeAssignments(gameId: Long): Flow<List<Assignment>>
-    @Insert suspend fun insertAttendance(attendance: GameAttendance)
+    @Transaction
+    @Query("SELECT * FROM assignments ORDER BY gameId, rotationIndex, playerId")
+    fun observeAllAssignmentsWithPlayers(): Flow<List<AssignmentWithPlayer>>
+    @Transaction
+    @Query("SELECT * FROM assignments WHERE gameId = :gameId ORDER BY rotationIndex, playerId")
+    fun observeAssignmentsWithPlayers(gameId: Long): Flow<List<AssignmentWithPlayer>>
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAttendance(attendance: GameAttendance): Long
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertAttendance(attendance: List<GameAttendance>)
+    @Query("UPDATE attendance SET status = :status WHERE gameId = :gameId AND playerId = :playerId")
+    suspend fun updateAttendanceStatus(gameId: Long, playerId: Long, status: AttendanceStatus): Int
     @Insert suspend fun insertAssignment(assignment: Assignment)
 }
 

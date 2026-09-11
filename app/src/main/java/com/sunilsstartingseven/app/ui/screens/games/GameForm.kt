@@ -21,17 +21,26 @@ import java.time.format.FormatStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun GameForm(busy: Boolean, error: String?, onSave: (Int, LocalDate, String) -> Unit, onCancel: () -> Unit) {
-    var round by rememberSaveable { mutableStateOf("") }
-    var dateDay by rememberSaveable { mutableLongStateOf(LocalDate.now().toEpochDay()) }
-    var notes by rememberSaveable { mutableStateOf("") }
+fun GameForm(
+    busy: Boolean,
+    error: String?,
+    initialRound: Int? = null,
+    initialDate: LocalDate = LocalDate.now(),
+    initialNotes: String = "",
+    title: String = "Plan a game day",
+    onSave: (Int, LocalDate, String) -> Unit,
+    onCancel: () -> Unit
+) {
+    var round by rememberSaveable { mutableStateOf(initialRound?.toString().orEmpty()) }
+    var dateDay by rememberSaveable { mutableLongStateOf(initialDate.toEpochDay()) }
+    var notes by rememberSaveable { mutableStateOf(initialNotes) }
     var submitted by rememberSaveable { mutableStateOf(false) }
     var showPicker by rememberSaveable { mutableStateOf(false) }
     val date = LocalDate.ofEpochDay(dateDay)
     val roundNumber = round.toIntOrNull()
     val roundInvalid = roundNumber == null || roundNumber <= 0
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(Space.Large), verticalArrangement = Arrangement.spacedBy(Space.Normal)) {
-        Text("Plan a game day", style = MaterialTheme.typography.headlineLarge)
+        Text(title, style = MaterialTheme.typography.headlineLarge)
         Text("Save the basics as a draft.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(round, { round = it }, Modifier.fillMaxWidth(), label = { Text("Round number") }, enabled = !busy, singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), isError = submitted && roundInvalid,

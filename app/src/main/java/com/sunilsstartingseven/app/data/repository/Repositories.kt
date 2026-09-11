@@ -1,7 +1,8 @@
 package com.sunilsstartingseven.app.data.repository
 
 import com.sunilsstartingseven.app.data.local.*
-import com.sunilsstartingseven.app.domain.model.PlayerInput
+import com.sunilsstartingseven.app.domain.model.*
+import androidx.room.withTransaction
 import java.time.LocalDate
 
 class PlayerRepository(private val dao: PlayerDao) {
@@ -23,5 +24,32 @@ class GameRepository(private val dao: GameDao) {
     suspend fun createDraft(roundNumber: Int, date: LocalDate, notes: String) {
         require(roundNumber > 0) { "Round number must be positive." }
         dao.insert(Game(roundNumber = roundNumber, gameDate = date, notes = notes.trim()))
+    }
+    suspend fun updateDraft(id: Long, roundNumber: Int, date: LocalDate, notes: String) {
+        require(roundNumber > 0) { "Round number must be positive." }
+        check(dao.updateDraftDetails(id, roundNumber, date, notes.trim()) == 1) { "Draft game no longer exists or is not editable." }
+    }
+}
+
+class RosterRepository(private val db: AppDatabase) {
+    private val players = db.playerDao()
+    private val roster = db.rosterDao()
+    val attendance = roster.observeAllAttendanceWithPlayers()
+    val assignments = roster.observeAllAssignmentsWithPlayers()
+
+    suspend fun initializeAttendance(gameId: Long) = db.withTransaction {
+        if (roster.attendanceCount(gameId) == 0) {
+            roster.insertAttendance(players.activePlayers().map { GameAttendance(gameId, it.id, AttendanceStatus.AVAILABLE) })
+        }
+    }
+
+    suspend fun setAttendance(gameId: Long, playerId: Long, status: AttendanceStatus) {
+        check(roster.updateAttendanceStatus(gameId, playerId, status) == 1) { "Attendance record no longer exists." }
+    }
+
+    suspend fun missingActivePlayers(gameId: Long): List<Player> = roster.activePlayersMissingFromAttendance(gameId)
+
+    suspend fun addMissingActivePlayers(gameId: Long) = db.withTransaction {
+        roster.insertAttendance(roster.activePlayersMissingFromAttendance(gameId).map { GameAttendance(gameId, it.id, AttendanceStatus.AVAILABLE) })
     }
 }

@@ -2,11 +2,11 @@
 
 A lightweight Android youth soccer roster app, built for a coach beside the pitch. Local-first, offline, and intended to help produce fair player rotations as the product develops.
 
-**Version 0.1.0 (versionCode 1)** — development build.
+**Version 0.2.0 (versionCode 2)** — development build.
 
 No backend, login, analytics, tracking or internet permission. Players and games stay in the local Room database. Android cloud backup and device transfer are disabled; uninstalling or clearing app storage removes data. Backup/restore is planned, not yet implemented.
 
-## Prompt 001 status
+## Current status
 
 Implemented:
 
@@ -14,13 +14,19 @@ Implemented:
 - Home, Team and Games navigation with useful empty states.
 - Add/edit players with first name and one uppercase last initial, validation, active/inactive filters, deactivation and reactivation.
 - Draft game creation with round number, date picker and optional notes.
+- Draft game detail/setup screen with editable round, date and notes.
+- Game-specific attendance snapshots initialized from the active team.
+- Available/Away tracking with immediate persistence, attendance summaries and under-seven guidance.
+- Deliberate Add Missing Players action for draft games when new active team members were added after attendance initialization.
+- Home and Games cards surface attendance summaries where available.
+- Pitch-based lineup visual foundation with four rotation selections, seven position anchors, empty position cards and a bench strip.
 - Room database, repositories and lifecycle-aware Coroutines / Flow state.
 - Typed attendance, assignments, playing positions and position families for future work.
 - DataStore Preferences foundation for lightweight team preferences.
 - Reusable Canvas soccer pitch and selected Compose previews.
 - Local Poppins fonts, adaptive launcher icon and Android splash screen without an artificial delay.
 
-Planned (not implemented): attendance workflow, fair roster generation, historical fairness engine, pitch lineup, manual roster editing, statistics and backup/restore. No generated rosters, seeded players or fake games exist in production.
+Planned (not implemented): fair roster generation, historical fairness engine, manual roster editing, statistics and backup/restore. The app still does not automatically generate lineups or rosters. No generated rosters, seeded players, fake games, player photos or copied mood-board sample content exist in production.
 
 ## Build
 
@@ -60,9 +66,9 @@ Alternatively copy the APK to an Android device and allow installation from that
 
 ## Tests
 
-`test` runs JVM domain tests and Robolectric tests against an actual file-backed Room database: validation, position families, explicit bench state, reopen persistence, name updates, deactivation/reactivation, foreign keys and duplicate constraints. Schema v1 is exported under `app/schemas`; future schema changes require explicit migrations. Destructive migration fallback is not enabled.
+`test` runs JVM domain tests and Robolectric tests against an actual file-backed Room database: validation, position families, position labels/anchors, attendance counts, expected bench/shortage state, explicit bench state, reopen persistence, name updates, deactivation/reactivation, attendance snapshot behavior, foreign keys and duplicate constraints. Schema v1 is exported under `app/schemas`; Prompt 002 did not require a schema change. Future schema changes require explicit migrations. Destructive migration fallback is not enabled.
 
-The Compose instrumentation test needs a **fresh disposable emulator/app installation**. It enters a test player and draft game, checks inline validation, edits/deactivates/reactivates the player, and checks activity recreation. It intentionally writes only to the test installation and expects empty starting data. Do not run it against a coach's existing data.
+The Compose instrumentation test needs a **fresh disposable emulator/app installation**. It enters test players and a draft game, edits/deactivates/reactivates the first player, initializes attendance, marks one player Away, opens the lineup screen, checks the four rotation controls, and checks activity recreation. It intentionally writes only to the test installation. Do not run it against a coach's existing data.
 
 ```powershell
 .\gradlew.bat connectedDebugAndroidTest
@@ -81,7 +87,7 @@ Explicit `Application → AppContainer → Repository → ViewModel` dependencie
 | `attendance` | Composite game/player key, Available/Away status, indexed player FK. |
 | `assignments` | Composite game/rotation/player key, explicit On-field/Bench state and nullable exact position. Unique game/rotation/position index prevents two players in one field slot; multiple null positions support the bench. Zero-based rotation index is not limited to four. |
 
-All historical foreign keys use RESTRICT. Editing a name or deactivating a player retains their ID and historical references. Assignment construction rejects a bench position, missing on-field position or negative rotation. The roster DAO persists future records but nothing in Prompt 001 generates assignments or attendance. Only Played games will contribute to future participation calculations; no such calculations exist yet. Position families are derived from exact positions, including shared DEF and WING families.
+All historical foreign keys use RESTRICT. Editing a name or deactivating a player retains their ID and historical references. Attendance initialization is idempotent: the first initialization for a draft game snapshots currently active players as Playing, and later Team changes do not silently rewrite that game. New active players can be added to an initialized draft only through the deliberate Add Missing Players action. Assignment construction rejects a bench position, missing on-field position or negative rotation. The roster DAO persists future records but Prompt 002 still does not generate assignments. Existing stored assignments can be rendered by the lineup foundation. Only Played games will contribute to future participation calculations; no such calculations exist yet. Position families are derived from exact positions, including shared DEF and WING families.
 
 DataStore contains only a lightweight team-name preference API, with no settings screen or historical records. Default data is empty.
 

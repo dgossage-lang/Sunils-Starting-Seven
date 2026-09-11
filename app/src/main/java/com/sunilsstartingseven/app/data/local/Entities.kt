@@ -4,6 +4,8 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import androidx.room.Embedded
+import androidx.room.Relation
 import com.sunilsstartingseven.app.domain.model.*
 import java.time.LocalDate
 
@@ -38,6 +40,11 @@ data class Game(
 )
 data class GameAttendance(val gameId: Long, val playerId: Long, val status: AttendanceStatus)
 
+data class AttendanceWithPlayer(
+    @Embedded val attendance: GameAttendance,
+    @Relation(parentColumn = "playerId", entityColumn = "id") val player: Player
+)
+
 @Entity(
     tableName = "assignments", primaryKeys = ["gameId", "rotationIndex", "playerId"],
     indices = [Index("playerId"), Index(value = ["gameId", "rotationIndex", "position"], unique = true)],
@@ -58,3 +65,8 @@ data class Assignment(
         require((playingState == PlayingState.ON_FIELD) == (position != null)) { "Only an on-field assignment has a position." }
     }
 }
+
+data class AssignmentWithPlayer(
+    @Embedded val assignment: Assignment,
+    @Relation(parentColumn = "playerId", entityColumn = "id") val player: Player
+)

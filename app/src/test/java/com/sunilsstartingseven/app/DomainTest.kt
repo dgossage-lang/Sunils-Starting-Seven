@@ -33,6 +33,31 @@ class DomainTest {
         assertEquals(PlayingPosition.entries.toSet(), expected.keys)
         expected.forEach { (position, family) -> assertEquals(family, position.family) }
     }
+    @Test fun positionLabelsMatchSevenAsideLayout() {
+        val labels = PlayingPosition.entries.associateWith { it.shortLabel }
+        assertEquals("ST", labels[PlayingPosition.STRIKER])
+        assertEquals("LW", labels[PlayingPosition.LEFT_WING])
+        assertEquals("MID", labels[PlayingPosition.MID])
+        assertEquals("RW", labels[PlayingPosition.RIGHT_WING])
+        assertEquals("D1", labels[PlayingPosition.DEFENDER_1])
+        assertEquals("D2", labels[PlayingPosition.DEFENDER_2])
+        assertEquals("GK", labels[PlayingPosition.GOALKEEPER])
+    }
+    @Test fun positionAnchorsStayInsidePitch() {
+        assertEquals(7, PlayingPosition.entries.size)
+        PlayingPosition.entries.forEach {
+            assertTrue("${it.name} x", it.x in 0f..1f)
+            assertTrue("${it.name} y", it.y in 0f..1f)
+        }
+    }
+    @Test fun attendanceSummaryCountsBenchAndShortage() {
+        assertEquals(AttendanceSummary(8, 2), attendanceSummary(List(8) { AttendanceStatus.AVAILABLE } + List(2) { AttendanceStatus.AWAY }))
+        assertEquals(1, AttendanceSummary(8, 0).expectedBench)
+        assertEquals(0, AttendanceSummary(7, 1).expectedBench)
+        assertTrue(AttendanceSummary(7, 0).readyForLineup)
+        assertFalse(AttendanceSummary(6, 1).readyForLineup)
+        assertEquals(1, AttendanceSummary(6, 0).neededForFullSeven)
+    }
     @Test fun benchHasNoPosition() { assertNull(Assignment(1, 0, 1, PlayingState.BENCH, null).position) }
     @Test(expected = IllegalArgumentException::class)
     fun onFieldRequiresPosition() { Assignment(1, 0, 1, PlayingState.ON_FIELD, null) }

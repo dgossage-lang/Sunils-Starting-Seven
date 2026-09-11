@@ -12,13 +12,16 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.sunilsstartingseven.app.R
+import com.sunilsstartingseven.app.data.local.Game
+import com.sunilsstartingseven.app.domain.model.GameStatus
 import com.sunilsstartingseven.app.ui.components.*
 import com.sunilsstartingseven.app.ui.screens.games.GameCard
 import com.sunilsstartingseven.app.ui.theme.*
 import com.sunilsstartingseven.app.viewmodel.TeamState
 
 @Composable
-fun HomeScreen(state: TeamState, onTeam: () -> Unit, onCreateGame: () -> Unit) {
+fun HomeScreen(state: TeamState, onTeam: () -> Unit, onCreateGame: () -> Unit, onOpenGame: (Game) -> Unit) {
+    val currentDraft = state.games.filter { it.status == GameStatus.DRAFT }.maxWithOrNull(compareBy({ it.gameDate }, { it.roundNumber }, { it.id }))
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Space.Large), verticalArrangement = Arrangement.spacedBy(Space.Large)) {
         if (state.games.isEmpty()) {
             Image(painterResource(R.drawable.logo_with_text), "Sunil’s Starting Seven. Play, rotate, grow.", Modifier.size(176.dp).align(Alignment.CenterHorizontally))
@@ -42,8 +45,11 @@ fun HomeScreen(state: TeamState, onTeam: () -> Unit, onCreateGame: () -> Unit) {
         Column(verticalArrangement = Arrangement.spacedBy(Space.Medium)) {
             Text("Game day starts here", style = MaterialTheme.typography.titleLarge)
             if (state.games.isEmpty()) Text("No games yet. Save a draft with your round and date.", style = MaterialTheme.typography.bodyMedium)
-            else GameCard(state.games.first())
-            PrimaryAction("Create Game", onCreateGame, Modifier.fillMaxWidth())
+            else if (currentDraft != null) {
+                GameCard(currentDraft, state.attendanceSummary(currentDraft.id)) { onOpenGame(currentDraft) }
+                PrimaryAction("Continue Setup", { onOpenGame(currentDraft) }, Modifier.fillMaxWidth())
+            } else GameCard(state.games.first(), state.attendanceSummary(state.games.first().id)) { onOpenGame(state.games.first()) }
+            if (currentDraft == null) PrimaryAction("Create Game", onCreateGame, Modifier.fillMaxWidth())
         }
         SoccerPitch(Modifier.fillMaxWidth())
         Text("PLAY • ROTATE • GROW", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, modifier = Modifier.align(Alignment.CenterHorizontally))
@@ -52,4 +58,4 @@ fun HomeScreen(state: TeamState, onTeam: () -> Unit, onCreateGame: () -> Unit) {
 
 @Preview(showBackground = true)
 @Composable
-private fun HomePreview() { StartingSevenTheme { HomeScreen(TeamState(loading = false), {}, {}) } }
+private fun HomePreview() { StartingSevenTheme { HomeScreen(TeamState(loading = false), {}, {}, {}) } }

@@ -5,9 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.sunilsstartingseven.app.AppContainer
-import com.sunilsstartingseven.app.data.local.Game
-import com.sunilsstartingseven.app.data.local.Player
-import com.sunilsstartingseven.app.domain.model.PlayerInput
+import com.sunilsstartingseven.app.data.local.*
+import com.sunilsstartingseven.app.domain.model.*
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -16,11 +15,22 @@ import java.time.LocalDate
 data class TeamState(
     val players: List<Player> = emptyList(),
     val games: List<Game> = emptyList(),
+    val attendance: Map<Long, List<AttendanceWithPlayer>> = emptyMap(),
+    val assignments: Map<Long, List<AssignmentWithPlayer>> = emptyMap(),
     val loading: Boolean = true,
     val saving: Boolean = false,
     val error: String? = null,
     val loadFailed: Boolean = false
-)
+) {
+    fun game(id: Long): Game? = games.find { it.id == id }
+    fun attendanceFor(gameId: Long): List<AttendanceWithPlayer> = attendance[gameId].orEmpty()
+    fun assignmentsFor(gameId: Long): List<AssignmentWithPlayer> = assignments[gameId].orEmpty()
+    fun attendanceSummary(gameId: Long): AttendanceSummary = attendanceSummary(attendanceFor(gameId).map { it.attendance.status })
+    fun missingActivePlayersFor(gameId: Long): List<Player> {
+        val represented = attendanceFor(gameId).map { it.player.id }.toSet()
+        return players.filter { it.isActive && it.id !in represented }
+    }
+}
 
 class TeamViewModel(private val container: AppContainer) : ViewModel() {
     private val mutableState = MutableStateFlow(TeamState())
@@ -29,12 +39,21 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
 
     private fun observe() {
         viewModelScope.launch {
-            combine(container.players.players, container.games.games) { players, games -> players to games }
+            combine(container.players.players, container.games.games, container.roster.attendance, container.roster.assignments) { players, games, attendance, assignments ->
+                TeamState(
+                    players = players,
+                    games = games,
+                    attendance = attendance.groupBy { it.attendance.gameId },
+                    assignments = assignments.groupBy { it.assignment.gameId },
+                    loading = false,
+                    loadFailed = false
+                )
+            }
                 .catch { error ->
                     Log.e("StartingSeven", "Unable to read local team data", error)
                     mutableState.update { it.copy(loading = false, loadFailed = true, error = "Couldn't load your team. Please retry.") }
                 }
-                .collect { (players, games) -> mutableState.update { it.copy(players = players, games = games, loading = false, loadFailed = false) } }
+                .collect { next -> mutableState.update { next.copy(saving = it.saving, error = it.error) } }
         }
     }
 
@@ -75,6 +94,18 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
         if (round <= 0) return
         write(onSuccess) { container.games.createDraft(round, date, notes) }
     }
+
+    fun updateGame(gameId: Long, round: Int, date: LocalDate, notes: String, onSuccess: () -> Unit) {
+        if (round <= 0) return
+        write(onSuccess) { container.games.updateDraft(gameId, round, date, notes) }
+    }
+
+    fun initializeAttendance(gameId: Long) = write { container.roster.initializeAttendance(gameId) }
+
+    fun setAttendance(gameId: Long, playerId: Long, status: AttendanceStatus) =
+        write { container.roster.setAttendance(gameId, playerId, status) }
+
+    fun addMissingActivePlayers(gameId: Long) = write { container.roster.addMissingActivePlayers(gameId) }
 
     companion object {
         fun factory(container: AppContainer): ViewModelProvider.Factory = object : ViewModelProvider.Factory {
