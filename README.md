@@ -2,7 +2,7 @@
 
 A lightweight Android youth soccer roster app, built for a coach beside the pitch. Local-first, offline, and intended to help produce fair player rotations from attendance and playing history.
 
-**Version 0.3.0 (versionCode 3)** — development build.
+**Version 0.4.0 (versionCode 4)** — development build.
 
 No backend, login, analytics, tracking or internet permission. Players, games, attendance and generated rosters stay in the local Room database. Android cloud backup and device transfer are disabled; uninstalling or clearing app storage removes data. Backup/restore is planned, not yet implemented.
 
@@ -27,12 +27,16 @@ Implemented:
 - Regenerate for Draft/Ready games, replacing the roster transactionally.
 - READY lifecycle after successful generation.
 - Mark as Played with confirmation; Played games become locked historical records and feed future fairness.
+- Manual tap-to-swap editing for READY lineups, including pitch-to-pitch and pitch-to-bench swaps across all four rotations in one edit session.
+- Transactional Save / Cancel workflow with lightweight Undo; unsaved swaps remain local until saved.
+- Friendly advisory fairness notes for manual overrides while keeping structurally valid coach changes saveable.
+- Played-game protection for attendance, regeneration and lineup edits; the saved edited roster becomes historical truth when marked Played.
 - Room database, repositories and lifecycle-aware Coroutines / Flow state.
 - Typed attendance, assignments, playing positions and position families.
 - DataStore Preferences foundation for team preferences and the one-time development seed version.
 - Local Poppins fonts, adaptive launcher icon and Android splash screen without an artificial delay.
 
-Planned later: manual drag/drop roster editing, manual position swaps, detailed fairness dashboard, charts, JSON backup/restore, cloud backup, sharing/export and notifications.
+Planned later: detailed fairness dashboard, charts, JSON backup/restore, cloud backup, sharing/export and notifications.
 
 ## Development seed
 
@@ -52,6 +56,8 @@ The generator is implemented outside Compose in `domain/rotation`. It creates fo
 Each rotation fills exactly seven positions: GK, D1, D2, LW, MID, RW and ST. Every available player appears exactly once per rotation, either on field or on the bench. Away players receive no assignment.
 
 The engine uses deterministic scoring with a central validator. It prioritizes structural validity, then balances within-game bench time, avoids consecutive bench periods for the normal ten-player case, prevents goalkeeper-to-bench transitions where feasible, discourages DEF-to-DEF and WING-to-WING transitions, rewards within-game family variety, and uses Played-game history to compensate exact-position, family, active-time and bench deficits over time.
+
+Automatic fair roster generation remains the recommendation. A coach can then choose **Edit Lineup** on a READY game, tap two player cards to swap their assignment slots for the selected rotation, and save all four rotations as one transaction. Manual edits must remain structurally valid, but fairness concerns such as Goalkeeper-to-Bench or consecutive bench periods are advisory notes rather than blockers.
 
 ## Build
 

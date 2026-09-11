@@ -1,7 +1,9 @@
 package com.sunilsstartingseven.app.ui.components
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -153,15 +155,22 @@ fun PitchPlayerCard(
     position: PlayingPosition,
     modifier: Modifier = Modifier,
     width: Dp = 74.dp,
-    height: Dp = 56.dp
+    height: Dp = 56.dp,
+    selected: Boolean = false,
+    target: Boolean = false,
+    onClick: (() -> Unit)? = null
 ) {
     val accent = PositionColor(position.family)
     Surface(
-        modifier.width(width).height(height).semantics { contentDescription = "${position.fullLabel} position" },
-        color = Color.White,
+        modifier.width(width).height(height)
+            .clip(MaterialTheme.shapes.medium)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .semantics { contentDescription = if (player == null) "${position.fullLabel} position" else "${player.displayName}, ${position.fullLabel}" },
+        color = when { selected -> MaterialTheme.colorScheme.secondaryContainer; target -> MaterialTheme.colorScheme.primaryContainer; else -> Color.White },
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 3.dp,
-        shadowElevation = 2.dp
+        shadowElevation = if (selected) 6.dp else 2.dp,
+        border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.secondary) else if (target) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
     ) {
         Column(Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             if (player == null) {
@@ -192,7 +201,9 @@ fun PitchPlayerCard(
 @Composable
 fun PitchLineup(
     playersByPosition: Map<PlayingPosition, Player>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    selectedPlayerId: Long? = null,
+    onPlayerClick: ((Long) -> Unit)? = null
 ) {
     BoxWithConstraints(modifier.aspectRatio(PitchAspectRatio)) {
         SoccerPitch(Modifier.fillMaxSize())
@@ -204,6 +215,9 @@ fun PitchLineup(
             PitchPlayerCard(
                 player = playersByPosition[position],
                 position = position,
+                selected = playersByPosition[position]?.id == selectedPlayerId,
+                target = selectedPlayerId != null && playersByPosition[position]?.id != selectedPlayerId,
+                onClick = playersByPosition[position]?.id?.let { id -> onPlayerClick?.let { click -> { click(id) } } },
                 width = cardWidth,
                 height = cardHeight,
                 modifier = Modifier
@@ -218,7 +232,7 @@ fun PitchLineup(
 }
 
 @Composable
-fun BenchStrip(players: List<Player>, expectedBench: Int, modifier: Modifier = Modifier) {
+fun BenchStrip(players: List<Player>, expectedBench: Int, modifier: Modifier = Modifier, selectedPlayerId: Long? = null, onPlayerClick: ((Long) -> Unit)? = null) {
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space.Small)) {
         Text("Bench", style = MaterialTheme.typography.titleMedium)
         Surface(color = MaterialTheme.colorScheme.surfaceContainer, shape = MaterialTheme.shapes.large) {
@@ -232,7 +246,14 @@ fun BenchStrip(players: List<Player>, expectedBench: Int, modifier: Modifier = M
             } else {
                 Row(Modifier.padding(Space.Small).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(Space.Small)) {
                     players.forEach { player ->
-                        Surface(color = Color.White, shape = MaterialTheme.shapes.medium, tonalElevation = 2.dp) {
+                        val selected = player.id == selectedPlayerId
+                        Surface(
+                            modifier = Modifier.clip(MaterialTheme.shapes.medium).then(if (onPlayerClick != null) Modifier.clickable { onPlayerClick(player.id) } else Modifier),
+                            color = if (selected) MaterialTheme.colorScheme.secondaryContainer else if (selectedPlayerId != null) MaterialTheme.colorScheme.primaryContainer else Color.White,
+                            shape = MaterialTheme.shapes.medium,
+                            tonalElevation = if (selected) 6.dp else 2.dp,
+                            border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.secondary) else if (selectedPlayerId != null) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
+                        ) {
                             Column(Modifier.padding(Space.Small), horizontalAlignment = Alignment.CenterHorizontally) {
                                 InitialsAvatar(player, Modifier.size(36.dp))
                                 Text(

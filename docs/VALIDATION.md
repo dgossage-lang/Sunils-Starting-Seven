@@ -1,5 +1,30 @@
 # Validation record
 
+## Prompt 004 validation
+
+Validated on 11 September 2026 on Windows.
+
+### Commands and results
+
+| Exact command | Final result |
+| --- | --- |
+| `.\gradlew.bat test --console=plain` | PASS — 44 JVM/Robolectric tests, including manual swap, structural validation, fairness-note, repository save/cancel and historical-truth coverage. |
+| `.\gradlew.bat test assembleDebug lint --console=plain` | PASS — JVM tests and debug APK build; lint completed without errors. |
+| `$env:ANDROID_SERIAL='emulator-5554'; .\gradlew.bat connectedDebugAndroidTest --console=plain` | PASS — one Compose instrumentation flow on the disposable API 35 emulator, including entering and cancelling READY-lineup edit mode before the game is marked Played. |
+
+### Manual editing coverage
+
+- On-field-to-on-field swaps exchange exact positions while retaining one player per position.
+- Pitch-to-bench swaps transfer the exact field position to the former bench player; bench-to-bench swaps are ignored.
+- Swaps affect only the chosen rotation. Pending changes remain in memory until Save Changes; Cancel/no-save leaves Room rows unchanged.
+- Save Changes validates all four rotations and replaces the assignment set inside one Room transaction. A Played game rejects a further manual save.
+- Fairness notes surface Goalkeeper-to-Bench, consecutive Bench, Defence-to-Defence and Wing-to-Wing transitions without blocking a structurally valid save.
+- The persistence test confirms a manually swapped assignment is the one later returned by the Played-history query.
+
+### Regression status
+
+The Prompt 003 rotation-engine suite remains passing, including the 17-round all-present balance simulation and absence compensation simulation. The automatic generator was not changed. Attendance still invalidates persisted assignments before a future lineup is generated.
+
 ## Prompt 003 validation
 
 Validated on 11 September 2026 on Windows, using Android Studio's JDK/Android SDK setup and the isolated `StartingSevenApi35` Android 15 / API 35 x86_64 emulator. The attached physical device was not used for automated validation.

@@ -52,7 +52,7 @@ class DevelopmentSeedRepository(private val db: AppDatabase, private val prefere
     }
 }
 
-class RosterRepository(private val db: AppDatabase, private val engine: FairRotationEngine = FairRotationEngine(), private val validator: RotationValidator = RotationValidator()) {
+class RosterRepository(private val db: AppDatabase, private val engine: FairRotationEngine = FairRotationEngine(), private val validator: RotationValidator = RotationValidator(), private val structuralValidator: StructuralRosterValidator = StructuralRosterValidator()) {
     private val players = db.playerDao()
     private val games = db.gameDao()
     private val roster = db.rosterDao()
@@ -118,5 +118,17 @@ class RosterRepository(private val db: AppDatabase, private val engine: FairRota
         val validation = validator.validate(current, available, away)
         check(validation.valid) { validation.errors.joinToString("; ") }
         check(games.updateStatus(gameId, GameStatus.PLAYED) == 1) { "Game no longer exists." }
+    }
+
+    suspend fun saveManualLineup(gameId: Long, pending: List<RotationAssignment>) = db.withTransaction {
+        val game = games.get(gameId) ?: error("Game no longer exists.")
+        check(game.status == GameStatus.READY) { "Only ready games can have a lineup edited." }
+        val attendanceRows = roster.getAttendance(gameId)
+        val available = attendanceRows.filter { it.status == AttendanceStatus.AVAILABLE }.map { it.playerId }.toSet()
+        val away = attendanceRows.filter { it.status == AttendanceStatus.AWAY }.map { it.playerId }.toSet()
+        val validation = structuralValidator.validate(pending, available, away)
+        check(validation.valid) { validation.errors.joinToString(" ") }
+        roster.deleteAssignmentsForGame(gameId)
+        roster.insertAssignments(pending.map { Assignment(gameId, it.rotationIndex, it.playerId, it.playingState, it.position) })
     }
 }

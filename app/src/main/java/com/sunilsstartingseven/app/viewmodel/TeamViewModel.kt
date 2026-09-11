@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.sunilsstartingseven.app.AppContainer
 import com.sunilsstartingseven.app.data.local.*
 import com.sunilsstartingseven.app.domain.model.*
+import com.sunilsstartingseven.app.domain.rotation.RotationAssignment
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -122,6 +123,9 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
     fun generateLineup(gameId: Long) = write { container.roster.generateLineup(gameId) }
 
     fun markPlayed(gameId: Long, onSuccess: () -> Unit = {}) = write(onSuccess) { container.roster.markPlayed(gameId) }
+
+    fun saveManualLineup(gameId: Long, assignments: List<RotationAssignment>, onSuccess: () -> Unit) =
+        write(onSuccess) { container.roster.saveManualLineup(gameId, assignments) }
 
     companion object {
         fun factory(container: AppContainer): ViewModelProvider.Factory = object : ViewModelProvider.Factory {

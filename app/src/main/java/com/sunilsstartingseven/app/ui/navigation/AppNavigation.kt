@@ -141,7 +141,8 @@ fun AppNavigation(viewModel: TeamViewModel) {
                             assignments = state.assignmentsFor(id),
                             busy = state.saving,
                             onGenerate = { viewModel.generateLineup(id) },
-                            onMarkPlayed = { viewModel.markPlayed(id) }
+                            onMarkPlayed = { viewModel.markPlayed(id) },
+                            onSaveManualLineup = { pending, onSuccess -> viewModel.saveManualLineup(id, pending, onSuccess) }
                         )
                     }
                 }

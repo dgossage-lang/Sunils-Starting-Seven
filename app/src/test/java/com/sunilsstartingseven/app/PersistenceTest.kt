@@ -7,6 +7,8 @@ import com.sunilsstartingseven.app.data.local.*
 import com.sunilsstartingseven.app.data.preferences.PreferenceRepository
 import com.sunilsstartingseven.app.data.repository.*
 import com.sunilsstartingseven.app.domain.model.*
+import com.sunilsstartingseven.app.domain.rotation.LineupSwaps
+import com.sunilsstartingseven.app.domain.rotation.RotationAssignment
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -198,6 +200,29 @@ class PersistenceTest {
         db = open()
 
         assertEquals(AttendanceStatus.AWAY, db.rosterDao().observeAttendance(game).first().single().status)
+    }
+
+    @Test fun manualLineupSaveIsAtomicAndPlayedRosterBecomesHistoricalTruth() = runBlocking {
+        (1..8).forEach { db.playerDao().insert(Player(firstName = "Player$it", lastInitial = "A")) }
+        val game = db.gameDao().insert(Game(roundNumber = 9, gameDate = LocalDate.now()))
+        val roster = RosterRepository(db)
+        roster.initializeAttendance(game)
+        roster.generateLineup(game)
+        val before = db.rosterDao().getAssignments(game)
+        val first = before.first { it.rotationIndex == 0 && it.playingState == PlayingState.ON_FIELD }
+        val bench = before.first { it.rotationIndex == 0 && it.playingState == PlayingState.BENCH }
+        val pending = LineupSwaps.swap(before.map { RotationAssignment(it.playerId, it.rotationIndex, it.playingState, it.position) }, 0, first.playerId, bench.playerId)
+
+        assertEquals(before, db.rosterDao().getAssignments(game)) // Cancel/no-save leaves Room untouched.
+        roster.saveManualLineup(game, pending)
+
+        val saved = db.rosterDao().getAssignments(game)
+        assertEquals(32, saved.size)
+        assertEquals(PlayingState.BENCH, saved.single { it.rotationIndex == 0 && it.playerId == first.playerId }.playingState)
+        assertEquals(first.position, saved.single { it.rotationIndex == 0 && it.playerId == bench.playerId }.position)
+        roster.markPlayed(game)
+        assertTrue(db.rosterDao().playedAssignments().any { it.gameId == game && it.rotationIndex == 0 && it.playerId == bench.playerId && it.position == first.position })
+        assertFails { roster.saveManualLineup(game, pending) }
     }
 
     private suspend fun assertFails(block: suspend () -> Unit) {
