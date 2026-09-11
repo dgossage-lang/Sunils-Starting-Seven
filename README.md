@@ -2,7 +2,7 @@
 
 A lightweight Android youth soccer roster app, built for a coach beside the pitch. Local-first, offline, and intended to help produce fair player rotations from attendance and playing history.
 
-**Version 0.4.0 (versionCode 4)** — development build.
+**Version 0.5.0 (versionCode 5)** — development build.
 
 No backend, login, analytics, tracking or internet permission. Players, games, attendance and generated rosters stay in the local Room database. Android cloud backup and device transfer are disabled; uninstalling or clearing app storage removes data. Backup/restore is planned, not yet implemented.
 
@@ -31,12 +31,16 @@ Implemented:
 - Transactional Save / Cancel workflow with lightweight Undo; unsaved swaps remain local until saved.
 - Friendly advisory fairness notes for manual overrides while keeping structurally valid coach changes saveable.
 - Played-game protection for attendance, regeneration and lineup edits; the saved edited roster becomes historical truth when marked Played.
+- Team Fairness dashboard with Played-game participation history, attendance-normalised fairness states, active/inactive player filters, team position balance and bench balance.
+- Player History screens reachable from Team and Fairness, showing games attended, games away, playing/bench rotations, exact-position history, role-family history, role coverage, likely next opportunities and game-by-game rotation chips.
 - Room database, repositories and lifecycle-aware Coroutines / Flow state.
 - Typed attendance, assignments, playing positions and position families.
 - DataStore Preferences foundation for team preferences and the one-time development seed version.
 - Local Poppins fonts, adaptive launcher icon and Android splash screen without an artificial delay.
 
-Planned later: detailed fairness dashboard, charts, JSON backup/restore, cloud backup, sharing/export and notifications.
+Only Played games contribute to historical fairness. Draft, Ready and Cancelled games are excluded, and Away attendance is visible so absences do not make a player look unfairly behind.
+
+Planned later: JSON backup/restore, cloud backup, sharing/export and notifications.
 
 ## Development seed
 
@@ -58,6 +62,12 @@ Each rotation fills exactly seven positions: GK, D1, D2, LW, MID, RW and ST. Eve
 The engine uses deterministic scoring with a central validator. It prioritizes structural validity, then balances within-game bench time, avoids consecutive bench periods for the normal ten-player case, prevents goalkeeper-to-bench transitions where feasible, discourages DEF-to-DEF and WING-to-WING transitions, rewards within-game family variety, and uses Played-game history to compensate exact-position, family, active-time and bench deficits over time.
 
 Automatic fair roster generation remains the recommendation. A coach can then choose **Edit Lineup** on a READY game, tap two player cards to swap their assignment slots for the selected rotation, and save all four rotations as one transaction. Manual edits must remain structurally valid, but fairness concerns such as Goalkeeper-to-Bench or consecutive bench periods are advisory notes rather than blockers.
+
+## Fairness history
+
+The Fairness tab derives its dashboard from the same persisted historical truth used by the generator: explicit GameAttendance rows and saved Assignment rows for GameStatus.PLAYED games only. It does not store calculated totals in Room.
+
+Participation labels use active rotations per attended Played game, rather than raw lifetime totals, so a player who missed matches is compared by opportunity rate. The app waits for at least three attended Played games before showing stronger labels such as Balanced, Needs opportunity or Slightly ahead; earlier records show as Building history. Exact-position and role-family summaries use the seven field positions and their families: GK, DEF, WING, MID and ATT.
 
 ## Build
 
@@ -86,7 +96,7 @@ Debug APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
 `test` runs JVM domain tests, the rotation-engine regression suite and Robolectric persistence tests against a file-backed Room database. Coverage includes validation, first-name-only display, the one-time seed, repository persistence, attendance behavior, roster structural validation, 7–12 player generation, Away players, transition constraints, reversed-order tie breaking, historical deficit influence, 17-round all-present balance and absence simulation.
 
-The Compose instrumentation test needs a fresh disposable emulator/app installation. It verifies the seeded roster, creates Round 1, marks Nick Away, generates fair rotations, switches rotation, marks the game Played, and verifies the played roster survives activity recreation.
+The Compose instrumentation test needs a fresh disposable emulator/app installation. It verifies the seeded roster, creates Round 1, marks Nick Away, generates fair rotations, switches rotation, marks the game Played, verifies the played roster survives activity recreation, opens the Fairness tab and opens Nick's Player History with the Away game row.
 
 See [validation record](docs/VALIDATION.md) for actual commands and results.
 

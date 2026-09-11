@@ -6,6 +6,11 @@ import androidx.test.core.app.ApplicationProvider
 import com.sunilsstartingseven.app.data.local.*
 import com.sunilsstartingseven.app.data.preferences.PreferenceRepository
 import com.sunilsstartingseven.app.data.repository.*
+import com.sunilsstartingseven.app.domain.history.FairnessHistoryCalculator
+import com.sunilsstartingseven.app.domain.history.HistoryAssignment
+import com.sunilsstartingseven.app.domain.history.HistoryAttendance
+import com.sunilsstartingseven.app.domain.history.HistoryGame
+import com.sunilsstartingseven.app.domain.history.HistoryPlayer
 import com.sunilsstartingseven.app.domain.model.*
 import com.sunilsstartingseven.app.domain.rotation.LineupSwaps
 import com.sunilsstartingseven.app.domain.rotation.RotationAssignment
@@ -222,6 +227,14 @@ class PersistenceTest {
         assertEquals(first.position, saved.single { it.rotationIndex == 0 && it.playerId == bench.playerId }.position)
         roster.markPlayed(game)
         assertTrue(db.rosterDao().playedAssignments().any { it.gameId == game && it.rotationIndex == 0 && it.playerId == bench.playerId && it.position == first.position })
+        val players = db.playerDao().observeAll().first().map { HistoryPlayer(it.id, it.displayName, it.isActive) }
+        val games = db.gameDao().observeAll().first().map { HistoryGame(it.id, it.roundNumber, it.gameDate, it.status) }
+        val attendance = db.rosterDao().getAttendance(game).map { HistoryAttendance(it.gameId, it.playerId, it.status) }
+        val assignments = db.rosterDao().getAssignments(game).map { HistoryAssignment(it.gameId, it.rotationIndex, it.playerId, it.playingState, it.position) }
+        val history = FairnessHistoryCalculator().calculate(players, games, attendance, assignments)
+        val benchPlayerHistory = history.player(bench.playerId)!!
+        assertTrue(benchPlayerHistory.exactPositions.getValue(first.position!!) >= 1)
+        assertEquals(first.position, benchPlayerHistory.games.single().rotations.single { it.rotationIndex == 0 }.position)
         assertFails { roster.saveManualLineup(game, pending) }
     }
 

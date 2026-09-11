@@ -6,6 +6,12 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.sunilsstartingseven.app.AppContainer
 import com.sunilsstartingseven.app.data.local.*
+import com.sunilsstartingseven.app.domain.history.FairnessHistoryCalculator
+import com.sunilsstartingseven.app.domain.history.HistoryAssignment
+import com.sunilsstartingseven.app.domain.history.HistoryAttendance
+import com.sunilsstartingseven.app.domain.history.HistoryGame
+import com.sunilsstartingseven.app.domain.history.HistoryPlayer
+import com.sunilsstartingseven.app.domain.history.TeamFairnessSummary
 import com.sunilsstartingseven.app.domain.model.*
 import com.sunilsstartingseven.app.domain.rotation.RotationAssignment
 import kotlinx.coroutines.CancellationException
@@ -18,6 +24,7 @@ data class TeamState(
     val games: List<Game> = emptyList(),
     val attendance: Map<Long, List<AttendanceWithPlayer>> = emptyMap(),
     val assignments: Map<Long, List<AssignmentWithPlayer>> = emptyMap(),
+    val fairness: TeamFairnessSummary = FairnessHistoryCalculator().calculate(emptyList(), emptyList(), emptyList(), emptyList()),
     val loading: Boolean = true,
     val saving: Boolean = false,
     val error: String? = null,
@@ -35,6 +42,7 @@ data class TeamState(
 
 class TeamViewModel(private val container: AppContainer) : ViewModel() {
     private val mutableState = MutableStateFlow(TeamState())
+    private val fairnessCalculator = FairnessHistoryCalculator()
     val state = mutableState.asStateFlow()
     init {
         viewModelScope.launch {
@@ -53,11 +61,23 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
     private fun observe() {
         viewModelScope.launch {
             combine(container.players.players, container.games.games, container.roster.attendance, container.roster.assignments) { players, games, attendance, assignments ->
+                val flatAttendance = attendance.map {
+                    HistoryAttendance(it.attendance.gameId, it.attendance.playerId, it.attendance.status)
+                }
+                val flatAssignments = assignments.map {
+                    HistoryAssignment(it.assignment.gameId, it.assignment.rotationIndex, it.assignment.playerId, it.assignment.playingState, it.assignment.position)
+                }
                 TeamState(
                     players = players,
                     games = games,
                     attendance = attendance.groupBy { it.attendance.gameId },
                     assignments = assignments.groupBy { it.assignment.gameId },
+                    fairness = fairnessCalculator.calculate(
+                        players = players.map { HistoryPlayer(it.id, it.displayName, it.isActive) },
+                        games = games.map { HistoryGame(it.id, it.roundNumber, it.gameDate, it.status) },
+                        attendance = flatAttendance,
+                        assignments = flatAssignments
+                    ),
                     loading = false,
                     loadFailed = false
                 )

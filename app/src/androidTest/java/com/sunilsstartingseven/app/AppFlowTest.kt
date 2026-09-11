@@ -46,5 +46,20 @@ class AppFlowTest {
         awaitText("Played games are locked as historical records.")
         compose.activityRule.scenario.recreate()
         awaitText("Played games are locked as historical records.")
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        awaitText("Attendance")
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        awaitText("Games")
+        compose.onNodeWithText("Fairness", useUnmergedTree = true).performClick()
+        awaitText("Team Balance")
+        awaitText("Player balance")
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Nick"))
+        awaitText("Nick")
+        compose.onNodeWithText("Nick").performClick()
+        awaitText("Player history")
+        awaitText("Participation")
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("Game History"))
+        awaitText("Game History")
+        awaitText("Away")
     }
 }

@@ -8,6 +8,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.DateRange
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +21,8 @@ import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.sunilsstartingseven.app.R
 import com.sunilsstartingseven.app.ui.screens.games.*
+import com.sunilsstartingseven.app.ui.screens.fairness.FairnessScreen
+import com.sunilsstartingseven.app.ui.screens.fairness.PlayerHistoryScreen
 import com.sunilsstartingseven.app.ui.screens.home.HomeScreen
 import com.sunilsstartingseven.app.ui.screens.team.*
 import com.sunilsstartingseven.app.ui.theme.Space
@@ -32,7 +35,7 @@ fun AppNavigation(viewModel: TeamViewModel) {
     val nav = rememberNavController()
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: "home"
-    val topLevel = route in listOf("home", "team", "games")
+    val topLevel = route in listOf("home", "team", "games", "fairness")
     val snackbars = remember { SnackbarHostState() }
     fun navigateTop(destination: String) {
         nav.navigate(destination) {
@@ -56,7 +59,12 @@ fun AppNavigation(viewModel: TeamViewModel) {
         },
         bottomBar = {
             if (topLevel) NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                listOf(Triple("home", "Home", Icons.Outlined.Home), Triple("team", "Team", Icons.Outlined.People), Triple("games", "Games", Icons.Outlined.DateRange)).forEach { (destination, label, icon) ->
+                listOf(
+                    Triple("home", "Home", Icons.Outlined.Home),
+                    Triple("team", "Team", Icons.Outlined.People),
+                    Triple("games", "Games", Icons.Outlined.DateRange),
+                    Triple("fairness", "Fairness", Icons.Outlined.Star)
+                ).forEach { (destination, label, icon) ->
                     NavigationBarItem(
                         selected = route == destination,
                         onClick = { navigateTop(destination) },
@@ -83,14 +91,33 @@ fun AppNavigation(viewModel: TeamViewModel) {
                 }
                 else -> NavHost(nav, startDestination = "home") {
                     composable("home") { HomeScreen(state, { navigateTop("team") }, { nav.navigate("game/new") }, { nav.navigate("game/${it.id}") }) }
-                    composable("team") { TeamScreen(state.players, state.saving, { nav.navigate("player/0") }, { nav.navigate("player/${it.id}") }, viewModel::setActive) }
+                    composable("team") {
+                        TeamScreen(
+                            state.players,
+                            state.saving,
+                            { nav.navigate("player/new") },
+                            { nav.navigate("player/${it.id}/history") },
+                            { nav.navigate("player/${it.id}/edit") },
+                            viewModel::setActive
+                        )
+                    }
                     composable("games") { GamesScreen(state.games, state.games.associate { it.id to state.attendanceSummary(it.id) }, { nav.navigate("game/new") }) { nav.navigate("game/${it.id}") } }
-                    composable("player/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStack ->
+                    composable("fairness") { FairnessScreen(state.fairness) { nav.navigate("player/$it/history") } }
+                    composable("player/new") {
+                        PlayerForm(false, "", "", state.saving, state.error,
+                            { first, last -> viewModel.savePlayer(null, first, last) { nav.popBackStack() } },
+                            { viewModel.clearError(); nav.popBackStack() })
+                    }
+                    composable("player/{id}/edit", arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStack ->
                         val id = backStack.arguments?.getLong("id") ?: 0L
                         val player = state.players.find { it.id == id }
-                        PlayerForm(id != 0L, player?.firstName.orEmpty(), player?.lastInitial.orEmpty(), state.saving, state.error,
-                            { first, last -> viewModel.savePlayer(id.takeIf { it != 0L }, first, last) { nav.popBackStack() } },
+                        PlayerForm(true, player?.firstName.orEmpty(), player?.lastInitial.orEmpty(), state.saving, state.error,
+                            { first, last -> viewModel.savePlayer(id, first, last) { nav.popBackStack() } },
                             { viewModel.clearError(); nav.popBackStack() })
+                    }
+                    composable("player/{id}/history", arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStack ->
+                        val id = backStack.arguments?.getLong("id") ?: 0L
+                        PlayerHistoryScreen(state.fairness.player(id)) { gameId -> nav.navigate("game/$gameId/lineup") }
                     }
                     composable("game/new") {
                         GameForm(
@@ -161,6 +188,9 @@ private fun MissingGame() {
 private fun screenTitle(route: String, topLevel: Boolean): String = when {
     topLevel -> "Sunil’s Starting Seven"
     route == "game/new" -> "New game"
+    route == "player/new" -> "New player"
+    route.contains("/history") -> "Player history"
+    route.contains("/edit") && route.startsWith("player/") -> "Edit player"
     route.contains("/lineup") -> "Lineup"
     route.contains("/edit") -> "Edit game"
     route.startsWith("game/") -> "Game setup"

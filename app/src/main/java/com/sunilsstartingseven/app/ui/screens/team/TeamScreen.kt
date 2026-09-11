@@ -1,6 +1,7 @@
 package com.sunilsstartingseven.app.ui.screens.team
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -17,7 +18,7 @@ import com.sunilsstartingseven.app.ui.components.*
 import com.sunilsstartingseven.app.ui.theme.*
 
 @Composable
-fun TeamScreen(players: List<Player>, busy: Boolean, onAdd: () -> Unit, onEdit: (Player) -> Unit, onActive: (Player, Boolean) -> Unit) {
+fun TeamScreen(players: List<Player>, busy: Boolean, onAdd: () -> Unit, onHistory: (Player) -> Unit, onEdit: (Player) -> Unit, onActive: (Player, Boolean) -> Unit) {
     var showInactive by rememberSaveable { mutableStateOf(false) }
     val visible = players.filter { it.isActive != showInactive }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(Space.Large), verticalArrangement = Arrangement.spacedBy(Space.Normal)) {
@@ -38,13 +39,13 @@ fun TeamScreen(players: List<Player>, busy: Boolean, onAdd: () -> Unit, onEdit: 
             if (showInactive) Text("No inactive players. Players you deactivate will stay safely here.", style = MaterialTheme.typography.bodyMedium)
             else EmptyCard("No players yet", "Add your first player to get the team started.", "Add Player", onAdd)
         }
-        items(visible, key = { it.id }) { player -> PlayerCard(player, busy, { onEdit(player) }, { onActive(player, !player.isActive) }) }
+        items(visible, key = { it.id }) { player -> PlayerCard(player, busy, { onHistory(player) }, { onEdit(player) }, { onActive(player, !player.isActive) }) }
     }
 }
 
 @Composable
-fun PlayerCard(player: Player, busy: Boolean, onEdit: () -> Unit, onToggle: () -> Unit) {
-    Card(Modifier.fillMaxWidth()) {
+fun PlayerCard(player: Player, busy: Boolean, onOpenHistory: () -> Unit, onEdit: () -> Unit, onToggle: () -> Unit) {
+    Card(Modifier.fillMaxWidth().clickable(enabled = !busy, onClick = onOpenHistory).semantics { contentDescription = "Open ${player.displayName} history" }) {
         Column(Modifier.padding(Space.Normal)) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Column(Modifier.weight(1f)) {
@@ -62,8 +63,8 @@ fun PlayerCard(player: Player, busy: Boolean, onEdit: () -> Unit, onToggle: () -
 
 @Preview(showBackground = true)
 @Composable
-private fun TeamPreview() { StartingSevenTheme { TeamScreen(emptyList(), false, {}, {}, { _, _ -> }) } }
+private fun TeamPreview() { StartingSevenTheme { TeamScreen(emptyList(), false, {}, {}, {}, { _, _ -> }) } }
 
 @Preview(showBackground = true)
 @Composable
-private fun PlayerPreview() { StartingSevenTheme { PlayerCard(Player(firstName = "Mason", lastInitial = "G"), false, {}, {}) } }
+private fun PlayerPreview() { StartingSevenTheme { PlayerCard(Player(firstName = "Mason", lastInitial = "G"), false, {}, {}, {}) } }

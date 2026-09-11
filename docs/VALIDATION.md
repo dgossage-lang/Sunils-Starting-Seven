@@ -1,5 +1,47 @@
 # Validation record
 
+## Prompt 005 validation
+
+Validated on 12 September 2026 on Windows, using the existing API 35 `StartingSevenApi35` emulator for instrumentation.
+
+### Commands and results
+
+| Exact command | Final result |
+| --- | --- |
+| `.\gradlew.bat test --console=plain` | PASS - 49 JVM/Robolectric tests: 18 domain, 5 fairness-history, 5 lineup-editing, 13 persistence and 8 rotation-engine tests. |
+| `.\gradlew.bat test assembleDebug lint --console=plain` | PASS - JVM tests, debug APK build and lint completed. Lint reported 0 errors and 20 advisory warnings. |
+| `$env:ANDROID_SERIAL='emulator-5554'; .\gradlew.bat connectedDebugAndroidTest --console=plain` | PASS - one Compose instrumentation flow on `StartingSevenApi35`, including Fairness navigation and Nick Player History with an Away row. |
+
+The emulator package clear command printed `Failed` before the passing instrumentation run because the package was not installed yet; Gradle installed the app and test APKs and the connected test task completed successfully.
+
+### Prompt 005 coverage
+
+- Fairness was added as the fourth bottom-navigation destination: Home, Team, Games and Fairness.
+- The Team screen now opens Player History from a player row while the edit icon still opens Edit Player.
+- History calculations use only `GameStatus.PLAYED` games and explicit attendance rows. Draft, Ready and Cancelled games are excluded.
+- Away attendance increments `gamesAway` and contributes no active rotations, bench rotations, exact-position counts or role-family counts.
+- Fairness states are attendance-normalised with `activeRotationsPerAttendedGame`; current active players define the main dashboard averages, while inactive players remain available behind a filter.
+- Minimum-history behaviour uses Building history until a player has at least three attended Played games.
+- Exact-position next opportunities are derived from position deficits against the player's own expected distribution and are capped to three positions.
+- The manual-edit persistence regression now confirms generated roster -> manual swap -> Save -> Mark Played -> Player History uses the manually saved assignment.
+- The 17-round all-present simulation, absence-compensation simulation and Prompt 004 manual-edit tests remain passing.
+
+### Database and build outputs
+
+No Room schema change was made. Database version remains 1; no migration or reseed was introduced.
+
+Debug APK:
+
+```text
+C:\Users\Drew\Documents\GitHub\Projects\12 - Sunil's Starting Seven\app\build\outputs\apk\debug\app-debug.apk
+```
+
+Debug APK SHA-256:
+
+```text
+BAA4624C1D671FCCADFE6D4AE6AD8CCDC13A90D19CE8B03F7B0C64F23A0E8616
+```
+
 ## Prompt 004 validation
 
 Validated on 11 September 2026 on Windows.
