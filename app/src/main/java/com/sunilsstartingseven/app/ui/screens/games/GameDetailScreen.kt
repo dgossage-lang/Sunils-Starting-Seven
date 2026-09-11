@@ -3,12 +3,14 @@ package com.sunilsstartingseven.app.ui.screens.games
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -91,30 +93,80 @@ fun GameDetailScreen(
 @Composable
 private fun AttendanceRow(player: Player, status: AttendanceStatus, busy: Boolean, onChange: (AttendanceStatus) -> Unit) {
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Row(Modifier.fillMaxWidth().padding(Space.Normal), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.Small)) {
-            InitialsAvatar(player)
-            Column(Modifier.weight(1f).widthIn(min = 0.dp)) {
+        Column(Modifier.fillMaxWidth().padding(Space.Normal), verticalArrangement = Arrangement.spacedBy(Space.Small)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.Small)) {
+                InitialsAvatar(player)
                 Text(
                     player.displayName,
+                    modifier = Modifier.weight(1f).widthIn(min = 0.dp),
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis
                 )
-                Text(status.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            SingleChoiceSegmentedButtonRow(Modifier.widthIn(max = 168.dp)) {
-                AttendanceStatus.entries.forEachIndexed { index, option ->
-                    SegmentedButton(
-                        selected = status == option,
-                        onClick = { onChange(option) },
-                        enabled = !busy,
-                        modifier = Modifier.semantics { contentDescription = "Mark ${player.displayName} ${option.label}" },
-                        shape = SegmentedButtonDefaults.itemShape(index, AttendanceStatus.entries.size),
-                        label = { Text(option.label) }
-                    )
-                }
-            }
+            AttendanceToggle(status, enabled = !busy, playerName = player.displayName, onChange = onChange)
+        }
+    }
+}
+
+@Composable
+private fun AttendanceToggle(status: AttendanceStatus, enabled: Boolean, playerName: String, onChange: (AttendanceStatus) -> Unit) {
+    val shape = MaterialTheme.shapes.medium
+    Surface(
+        Modifier.fillMaxWidth(),
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        tonalElevation = 0.dp,
+        border = ButtonDefaults.outlinedButtonBorder(enabled)
+    ) {
+        Row(Modifier.fillMaxWidth().padding(2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            AttendanceToggleSegment(
+                label = AttendanceStatus.AVAILABLE.label,
+                selected = status == AttendanceStatus.AVAILABLE,
+                selectedColor = MaterialTheme.colorScheme.primary,
+                selectedContentColor = MaterialTheme.colorScheme.onPrimary,
+                enabled = enabled,
+                modifier = Modifier.weight(1f),
+                contentDescription = "Mark $playerName Playing"
+            ) { onChange(AttendanceStatus.AVAILABLE) }
+            AttendanceToggleSegment(
+                label = AttendanceStatus.AWAY.label,
+                selected = status == AttendanceStatus.AWAY,
+                selectedColor = MaterialTheme.colorScheme.secondary,
+                selectedContentColor = MaterialTheme.colorScheme.onSecondary,
+                enabled = enabled,
+                modifier = Modifier.weight(1f),
+                contentDescription = "Mark $playerName Away"
+            ) { onChange(AttendanceStatus.AWAY) }
+        }
+    }
+}
+
+@Composable
+private fun AttendanceToggleSegment(
+    label: String,
+    selected: Boolean,
+    selectedColor: androidx.compose.ui.graphics.Color,
+    selectedContentColor: androidx.compose.ui.graphics.Color,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    contentDescription: String,
+    onClick: () -> Unit
+) {
+    val background = if (selected) selectedColor else MaterialTheme.colorScheme.surface
+    val content = if (selected) selectedContentColor else MaterialTheme.colorScheme.onSurface
+    Surface(
+        modifier
+            .heightIn(min = 48.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .clickable(enabled = enabled) { onClick() }
+            .semantics { this.contentDescription = contentDescription },
+        shape = MaterialTheme.shapes.medium,
+        color = if (enabled) background else background.copy(alpha = .58f)
+    ) {
+        Box(Modifier.fillMaxWidth().padding(horizontal = Space.Medium, vertical = Space.Small), contentAlignment = Alignment.Center) {
+            Text(label, style = MaterialTheme.typography.labelLarge, color = content, maxLines = 1, softWrap = false)
         }
     }
 }
@@ -131,7 +183,7 @@ private fun GameDetailPreview() {
 @Composable
 private fun AttendanceRowCompactPreview() {
     StartingSevenTheme {
-        AttendanceRow(Player(firstName = "Mason-Junior", lastInitial = "G"), AttendanceStatus.AVAILABLE, false) {}
+        AttendanceRow(Player(firstName = "Samrith", lastInitial = ""), AttendanceStatus.AVAILABLE, false) {}
     }
 }
 
@@ -139,6 +191,6 @@ private fun AttendanceRowCompactPreview() {
 @Composable
 private fun AttendanceRowNormalPreview() {
     StartingSevenTheme {
-        AttendanceRow(Player(firstName = "Christopher", lastInitial = "W"), AttendanceStatus.AWAY, false) {}
+        AttendanceRow(Player(firstName = "Cameron", lastInitial = ""), AttendanceStatus.AWAY, false) {}
     }
 }
