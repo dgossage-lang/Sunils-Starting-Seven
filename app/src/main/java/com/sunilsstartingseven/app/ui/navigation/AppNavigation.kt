@@ -1,0 +1,104 @@
+package com.sunilsstartingseven.app.ui.navigation
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.outlined.DateRange
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.People
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavType
+import androidx.navigation.compose.*
+import androidx.navigation.navArgument
+import com.sunilsstartingseven.app.R
+import com.sunilsstartingseven.app.ui.screens.games.*
+import com.sunilsstartingseven.app.ui.screens.home.HomeScreen
+import com.sunilsstartingseven.app.ui.screens.team.*
+import com.sunilsstartingseven.app.ui.theme.Space
+import com.sunilsstartingseven.app.viewmodel.TeamViewModel
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AppNavigation(viewModel: TeamViewModel) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val nav = rememberNavController()
+    val entry by nav.currentBackStackEntryAsState()
+    val route = entry?.destination?.route ?: "home"
+    val topLevel = route in listOf("home", "team", "games")
+    val snackbars = remember { SnackbarHostState() }
+    fun navigateTop(destination: String) {
+        nav.navigate(destination) {
+            popUpTo("home") { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+    LaunchedEffect(state.error, topLevel) {
+        if (topLevel && !state.loadFailed) state.error?.let { snackbars.showSnackbar(it); viewModel.clearError() }
+    }
+    BackHandler(state.saving) { /* Keep the save destination alive until persistence completes. */ }
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbars) },
+        topBar = {
+            TopAppBar(title = { Text(if (topLevel) "Sunil’s Starting Seven" else if (route == "game/new") "New game" else "Player", style = MaterialTheme.typography.titleMedium) },
+                navigationIcon = {
+                    if (topLevel) Image(painterResource(R.drawable.logo), null, Modifier.padding(start = Space.Normal, end = Space.Small).size(36.dp))
+                    else IconButton({ if (!state.saving) { viewModel.clearError(); nav.popBackStack() } }, enabled = !state.saving) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
+                }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background))
+        },
+        bottomBar = {
+            if (topLevel) NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                listOf(Triple("home", "Home", Icons.Outlined.Home), Triple("team", "Team", Icons.Outlined.People), Triple("games", "Games", Icons.Outlined.DateRange)).forEach { (destination, label, icon) ->
+                    NavigationBarItem(
+                        selected = route == destination,
+                        onClick = { navigateTop(destination) },
+                        icon = { Icon(icon, null) },
+                        label = { Text(label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    )
+                }
+            }
+        }
+    ) { padding ->
+        Box(Modifier.padding(padding).fillMaxSize()) {
+            when {
+                state.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                state.loadFailed -> Column(Modifier.align(Alignment.Center).padding(Space.Large), verticalArrangement = Arrangement.spacedBy(Space.Normal)) {
+                    Text(state.error ?: "Couldn't load your team.")
+                    Button(viewModel::retryLoad) { Text("Retry") }
+                }
+                else -> NavHost(nav, startDestination = "home") {
+                    composable("home") { HomeScreen(state, { navigateTop("team") }, { nav.navigate("game/new") }) }
+                    composable("team") { TeamScreen(state.players, state.saving, { nav.navigate("player/0") }, { nav.navigate("player/${it.id}") }, viewModel::setActive) }
+                    composable("games") { GamesScreen(state.games) { nav.navigate("game/new") } }
+                    composable("player/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStack ->
+                        val id = backStack.arguments?.getLong("id") ?: 0L
+                        val player = state.players.find { it.id == id }
+                        PlayerForm(id != 0L, player?.firstName.orEmpty(), player?.lastInitial.orEmpty(), state.saving, state.error,
+                            { first, last -> viewModel.savePlayer(id.takeIf { it != 0L }, first, last) { nav.popBackStack() } },
+                            { viewModel.clearError(); nav.popBackStack() })
+                    }
+                    composable("game/new") {
+                        GameForm(state.saving, state.error,
+                            { round, date, notes -> viewModel.createGame(round, date, notes) { nav.popBackStack(); navigateTop("games") } },
+                            { viewModel.clearError(); nav.popBackStack() })
+                    }
+                }
+            }
+        }
+    }
+}

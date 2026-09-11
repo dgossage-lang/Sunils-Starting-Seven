@@ -1,0 +1,14 @@
+<resources>
+    <color name="brand_white">#FFFFFF</color>
+    <style name="Theme.StartingSeven" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowBackground">@color/brand_white</item>
+    </style>
+    <style name="Theme.StartingSeven.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/brand_white</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.StartingSeven</item>
+    </style>
+</resources>
