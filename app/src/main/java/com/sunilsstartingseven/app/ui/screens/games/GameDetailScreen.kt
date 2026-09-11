@@ -36,6 +36,7 @@ fun GameDetailScreen(
 ) {
     LaunchedEffect(game.id) { onInitialize() }
     val summary = attendanceSummary(attendance.map { it.attendance.status })
+    val editableAttendance = game.status != GameStatus.PLAYED
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(Space.Large), verticalArrangement = Arrangement.spacedBy(Space.Normal)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(Space.Small)) {
@@ -50,6 +51,9 @@ fun GameDetailScreen(
                     Text(game.status.label, Modifier.padding(horizontal = Space.Medium, vertical = Space.Small), style = MaterialTheme.typography.labelMedium)
                 }
                 if (game.notes.isNotBlank()) Text(game.notes, style = MaterialTheme.typography.bodyMedium)
+                if (game.status == GameStatus.PLAYED) {
+                    Text("This game is marked played and now counts toward future fairness.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
         item { AttendanceSummaryRow(summary) }
@@ -77,7 +81,7 @@ fun GameDetailScreen(
             item { EmptyCard("No attendance yet", "Add active players to this draft game.", "Initialize Attendance", onInitialize) }
         } else {
             items(attendance, key = { it.player.id }) { row ->
-                AttendanceRow(row.player, row.attendance.status, busy) { onAttendance(row.player.id, it) }
+                AttendanceRow(row.player, row.attendance.status, busy || !editableAttendance) { onAttendance(row.player.id, it) }
             }
         }
         item { PrimaryAction("Open Lineup", onLineup, Modifier.fillMaxWidth()) }

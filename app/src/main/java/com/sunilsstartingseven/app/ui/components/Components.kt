@@ -2,7 +2,9 @@ package com.sunilsstartingseven.app.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -165,12 +167,18 @@ fun PitchPlayerCard(
             if (player == null) {
                 Text(position.shortLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
             } else {
-                Surface(color = accent, shape = MaterialTheme.shapes.small) {
-                    Text(position.shortLabel, Modifier.padding(horizontal = 7.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall)
-                }
                 Text(
-                    player.firstName,
-                    style = MaterialTheme.typography.labelMedium,
+                    player.displayName,
+                    style = MaterialTheme.typography.labelSmall,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+                Text(
+                    position.shortLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis,
@@ -222,12 +230,18 @@ fun BenchStrip(players: List<Player>, expectedBench: Int, modifier: Modifier = M
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                Row(Modifier.padding(Space.Small), horizontalArrangement = Arrangement.spacedBy(Space.Small)) {
+                Row(Modifier.padding(Space.Small).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(Space.Small)) {
                     players.forEach { player ->
                         Surface(color = Color.White, shape = MaterialTheme.shapes.medium, tonalElevation = 2.dp) {
                             Column(Modifier.padding(Space.Small), horizontalAlignment = Alignment.CenterHorizontally) {
                                 InitialsAvatar(player, Modifier.size(36.dp))
-                                Text(player.displayName, style = MaterialTheme.typography.labelSmall)
+                                Text(
+                                    player.displayName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     }

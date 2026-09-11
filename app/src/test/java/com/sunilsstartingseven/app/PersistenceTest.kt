@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.sunilsstartingseven.app.data.local.*
+import com.sunilsstartingseven.app.data.preferences.PreferenceRepository
 import com.sunilsstartingseven.app.data.repository.*
 import com.sunilsstartingseven.app.domain.model.*
 import kotlinx.coroutines.flow.first
@@ -40,6 +41,33 @@ class PersistenceTest {
         assertEquals(LocalDate.of(2026, 9, 12), game.gameDate)
         assertEquals(GameStatus.DRAFT, game.status)
         assertEquals("Bring water", game.notes)
+    }
+
+    @Test fun firstNameOnlySeedDisplayHasNoDanglingPeriod() {
+        assertEquals("Nick", Player(firstName = "Nick", lastInitial = "").displayName)
+        assertEquals("Mason G.", Player(firstName = "Mason", lastInitial = "G").displayName)
+    }
+
+    @Test fun developmentSeedClearsOnceAndSeedsOriginalRoster() = runBlocking {
+        val preferences = PreferenceRepository(context)
+        preferences.setDevelopmentSeedVersion(0)
+        db.playerDao().insert(Player(firstName = "Test", lastInitial = "T"))
+        val game = db.gameDao().insert(Game(roundNumber = 99, gameDate = LocalDate.now()))
+        db.rosterDao().insertAttendance(GameAttendance(game, 1, AttendanceStatus.AWAY))
+
+        DevelopmentSeedRepository(db, preferences).applyDevelopmentSeedIfNeeded()
+
+        val seeded = db.playerDao().observeAll().first()
+        assertEquals(DevelopmentSeedRepository.DevelopmentSeedPlayers.toSet(), seeded.map { it.firstName }.toSet())
+        assertTrue(seeded.all { it.isActive && it.lastInitial.isBlank() })
+        assertTrue(db.gameDao().observeAll().first().isEmpty())
+        assertTrue(db.rosterDao().observeAttendance(game).first().isEmpty())
+
+        PlayerRepository(db.playerDao()).save(null, "Mason", "G")
+        DevelopmentSeedRepository(db, preferences).applyDevelopmentSeedIfNeeded()
+        val afterSecondRun = db.playerDao().observeAll().first()
+        assertTrue(afterSecondRun.any { it.displayName == "Mason G." })
+        assertEquals(11, afterSecondRun.size)
     }
 
     @Test fun editsAndActivationPreserveIdentityAndHistory() = runBlocking {

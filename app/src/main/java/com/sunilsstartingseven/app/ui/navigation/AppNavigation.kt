@@ -135,7 +135,14 @@ fun AppNavigation(viewModel: TeamViewModel) {
                         val id = backStack.arguments?.getLong("id") ?: 0L
                         val game = state.game(id)
                         if (game == null) MissingGame()
-                        else LineupScreen(game, state.attendanceFor(id), state.assignmentsFor(id))
+                        else LineupScreen(
+                            game = game,
+                            attendance = state.attendanceFor(id),
+                            assignments = state.assignmentsFor(id),
+                            busy = state.saving,
+                            onGenerate = { viewModel.generateLineup(id) },
+                            onMarkPlayed = { viewModel.markPlayed(id) }
+                        )
                     }
                 }
             }

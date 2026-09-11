@@ -26,9 +26,11 @@ interface PlayerDao {
     @Query("SELECT * FROM players WHERE isActive = 1 ORDER BY firstName COLLATE NOCASE, lastInitial COLLATE NOCASE, id")
     suspend fun activePlayers(): List<Player>
     @Insert suspend fun insert(player: Player): Long
+    @Insert suspend fun insert(players: List<Player>)
     @Query("UPDATE players SET firstName = :firstName, lastInitial = :lastInitial WHERE id = :id")
     suspend fun updateName(id: Long, firstName: String, lastInitial: String): Int
     @Query("UPDATE players SET isActive = :active WHERE id = :id") suspend fun setActive(id: Long, active: Boolean): Int
+    @Query("DELETE FROM players") suspend fun deleteAll()
 }
 
 @Dao
@@ -38,6 +40,9 @@ interface GameDao {
     @Insert suspend fun insert(game: Game): Long
     @Query("UPDATE games SET roundNumber = :roundNumber, gameDate = :date, notes = :notes WHERE id = :id AND status = 'DRAFT'")
     suspend fun updateDraftDetails(id: Long, roundNumber: Int, date: LocalDate, notes: String): Int
+    @Query("UPDATE games SET status = :status WHERE id = :id") suspend fun updateStatus(id: Long, status: GameStatus): Int
+    @Query("SELECT * FROM games WHERE status = 'PLAYED' ORDER BY gameDate, roundNumber, id") suspend fun playedGames(): List<Game>
+    @Query("DELETE FROM games") suspend fun deleteAll()
 }
 
 @Dao
@@ -54,6 +59,17 @@ interface RosterDao {
     @Query("SELECT * FROM players WHERE isActive = 1 AND id NOT IN (SELECT playerId FROM attendance WHERE gameId = :gameId) ORDER BY firstName COLLATE NOCASE, lastInitial COLLATE NOCASE, id")
     suspend fun activePlayersMissingFromAttendance(gameId: Long): List<Player>
     @Query("SELECT * FROM assignments WHERE gameId = :gameId ORDER BY rotationIndex, playerId") fun observeAssignments(gameId: Long): Flow<List<Assignment>>
+    @Query("SELECT * FROM attendance WHERE gameId = :gameId ORDER BY playerId")
+    suspend fun getAttendance(gameId: Long): List<GameAttendance>
+    @Transaction
+    @Query("SELECT * FROM attendance WHERE gameId = :gameId ORDER BY playerId")
+    suspend fun getAttendanceWithPlayers(gameId: Long): List<AttendanceWithPlayer>
+    @Query("SELECT * FROM assignments WHERE gameId = :gameId ORDER BY rotationIndex, playerId")
+    suspend fun getAssignments(gameId: Long): List<Assignment>
+    @Query("SELECT * FROM assignments WHERE gameId IN (SELECT id FROM games WHERE status = 'PLAYED') ORDER BY gameId, rotationIndex, playerId")
+    suspend fun playedAssignments(): List<Assignment>
+    @Query("SELECT COUNT(*) FROM assignments WHERE gameId = :gameId")
+    suspend fun assignmentCount(gameId: Long): Int
     @Transaction
     @Query("SELECT * FROM assignments ORDER BY gameId, rotationIndex, playerId")
     fun observeAllAssignmentsWithPlayers(): Flow<List<AssignmentWithPlayer>>
@@ -65,6 +81,13 @@ interface RosterDao {
     @Query("UPDATE attendance SET status = :status WHERE gameId = :gameId AND playerId = :playerId")
     suspend fun updateAttendanceStatus(gameId: Long, playerId: Long, status: AttendanceStatus): Int
     @Insert suspend fun insertAssignment(assignment: Assignment)
+    @Insert suspend fun insertAssignments(assignments: List<Assignment>)
+    @Query("DELETE FROM assignments WHERE gameId = :gameId")
+    suspend fun deleteAssignmentsForGame(gameId: Long)
+    @Query("DELETE FROM assignments")
+    suspend fun deleteAllAssignments()
+    @Query("DELETE FROM attendance")
+    suspend fun deleteAllAttendance()
 }
 
 @Database(entities = [Player::class, Game::class, GameAttendance::class, Assignment::class], version = 1, exportSchema = true)

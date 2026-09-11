@@ -1,5 +1,75 @@
 # Validation record
 
+## Prompt 003 validation
+
+Validated on 11 September 2026 on Windows, using Android Studio's JDK/Android SDK setup and the isolated `StartingSevenApi35` Android 15 / API 35 x86_64 emulator. The attached physical device was not used for automated validation.
+
+### Commands and results
+
+| Exact command | Final result |
+| --- | --- |
+| `.\gradlew.bat test --console=plain` | PASS — JVM/Robolectric suite, including rotation engine, seed and persistence tests. |
+| `.\gradlew.bat test assembleDebug --console=plain` | PASS — tests plus debug APK build. |
+| `.\gradlew.bat lint --console=plain` | PASS — lint completed with no errors. |
+| `.\gradlew.bat connectedDebugAndroidTest --console=plain` with `ANDROID_SERIAL=emulator-5554` | PASS — one Compose instrumentation test on the disposable emulator. |
+| `adb -s emulator-5554 shell am instrument -w com.sunilsstartingseven.app.test/androidx.test.runner.AndroidJUnitRunner` | PASS — instrumentation repeated directly to leave generated roster data for visual inspection. |
+
+Final APK: `app/build/outputs/apk/debug/app-debug.apk` (23,227,820 bytes).
+
+Final APK SHA-256:
+
+```text
+B5DA78B001532FC79AE121D85D10B21DA1312994A2133F8C12626AB03B60866E
+```
+
+### UI correction validation
+
+Manual emulator inspection confirmed seeded player names render horizontally on Game Setup. First-name-only players display as `Nick`, `Cameron`, `Axel`, etc., without dangling periods. The Playing/Away segmented control no longer crushes the name column, and Played-game attendance controls are disabled as historical records.
+
+The generated Lineup screen shows a portrait pitch with top and bottom goals, a horizontal halfway line, ST near the top goal, GK in front of the bottom goal, D1/D2 below midfield, and LW/MID/RW in the attacking/midfield channels. Populated cards display readable player names plus the position label. Empty cards show only one position label in previews and ungenerated states.
+
+Screenshots captured under `verification/` include:
+
+- `003-home.png` — one-time seed visible as 10 active players.
+- `003-attendance-played.png` — Played attendance with Nick Away and horizontal seeded names.
+- `003-lineup-played.png` — generated portrait lineup with persisted player cards.
+
+### Development reseed results
+
+The one-time development seed uses DataStore key `development_seed_version`. If it is below `1`, the app transactionally clears assignments, attendance, games and players, inserts exactly these players, then stores version `1`:
+
+Nick, Cameron, Axel, Hughie, Jero, Samrith, Macson, Artie, Roman, Nico.
+
+All seeded players are active and use an empty `lastInitial`; no fake games or assignments are seeded. The persistence test verifies the seed runs once and that a later user-created player survives a second initialization.
+
+### Rotation-engine tests and metrics
+
+The JVM rotation suite covers fewer-than-seven rejection, 7, 8, 9, 10, 11 and 12 available players, one/multiple Away player handling, structural validation, reversed-order input, GK-to-bench prevention, no consecutive bench for the normal ten-player case, historical position deficit influence, 17-round all-present simulation, and an absence simulation.
+
+17-round all-present metrics for 10 players:
+
+- Active rotations per player: 47–48.
+- Bench rotations per player: 20–21.
+- Exact-position counts per player per position: 6–7 for GK, D1, D2, LW, MID, RW and ST.
+- Family distribution follows the exact-position totals: GK 6–7, DEF 13–14, WING 13–14, MID 6–7, ATT 6–7.
+- Hard-rule violation count: 0.
+
+Absence simulation:
+
+- Simulated 17 rounds with player 3 away in selected rounds.
+- Away player received zero assignments in missed rounds.
+- Subsequent rounds remained structurally valid and history-aware scoring compensated progressively rather than trying to repay a whole missed match in one game.
+- Hard-rule violation count: 0.
+
+### Persistence and lifecycle validation
+
+Generation saves all four rotations transactionally and changes the game to READY. Regenerate replaces stored assignments for Draft/Ready games. Attendance edits on non-Played games clear generated assignments and return the game to Draft. Mark as Played validates the stored roster, changes READY to PLAYED, locks normal editing, and makes assignments eligible for future fairness history. Draft, Ready and Cancelled games are ignored by the fairness history query.
+
+The Compose instrumentation test exercises the seeded roster, Round 1 creation, Nick Away, Generate Fair Rotations, rotation switching, Mark as Played confirmation and activity recreation with the played roster retained.
+
+### Remaining limits
+
+Runtime validation used an API 35 emulator rather than a physical Samsung device. Manual drag/drop roster editing, swaps, statistics dashboards, backup/restore, export/sharing and notifications remain intentionally out of scope.
 ## Prompt 002 validation
 
 Validated on 11 September 2026 on Windows, using Android Studio's OpenJDK 21.0.10, SDK 36, and the isolated `StartingSevenApi35` Android 15 / API 35 x86_64 emulator. A physical Android device was connected, but automated tests were intentionally run on the disposable emulator so test data did not touch the physical device.
@@ -97,3 +167,4 @@ Lint reports **0 errors and 19 warnings**. These concern newer dependency/SDK/Gr
 Runtime verification used API 35, not a physical device or API 26/36 device. Other manufacturer icon masks and device layouts have not been exhaustively exercised. The final navigation-only colour change was rebuilt, unit-tested, linted and visually checked; the earlier end-to-end test covers the unchanged functional flow.
 
 No core Prompt 001 feature is intentionally deferred. Attendance workflows, fairness/rotation generation, lineup editing, statistics and backup/restore remain out of scope. The user-selected workspace folder is retained; Gradle project, package, resource and GitHub repository identifiers use safe names.
+

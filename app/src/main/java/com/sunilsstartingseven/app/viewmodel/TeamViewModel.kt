@@ -35,7 +35,19 @@ data class TeamState(
 class TeamViewModel(private val container: AppContainer) : ViewModel() {
     private val mutableState = MutableStateFlow(TeamState())
     val state = mutableState.asStateFlow()
-    init { observe() }
+    init {
+        viewModelScope.launch {
+            try {
+                container.developmentSeed.applyDevelopmentSeedIfNeeded()
+                observe()
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.e("StartingSeven", "Unable to apply development seed", error)
+                mutableState.update { it.copy(loading = false, loadFailed = true, error = "Couldn't prepare the development roster. Please retry.") }
+            }
+        }
+    }
 
     private fun observe() {
         viewModelScope.launch {
@@ -106,6 +118,10 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
         write { container.roster.setAttendance(gameId, playerId, status) }
 
     fun addMissingActivePlayers(gameId: Long) = write { container.roster.addMissingActivePlayers(gameId) }
+
+    fun generateLineup(gameId: Long) = write { container.roster.generateLineup(gameId) }
+
+    fun markPlayed(gameId: Long, onSuccess: () -> Unit = {}) = write(onSuccess) { container.roster.markPlayed(gameId) }
 
     companion object {
         fun factory(container: AppContainer): ViewModelProvider.Factory = object : ViewModelProvider.Factory {

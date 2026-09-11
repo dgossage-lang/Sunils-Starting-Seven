@@ -6,6 +6,7 @@ import androidx.room.Room
 import com.sunilsstartingseven.app.data.local.AppDatabase
 import com.sunilsstartingseven.app.data.preferences.PreferenceRepository
 import com.sunilsstartingseven.app.data.repository.GameRepository
+import com.sunilsstartingseven.app.data.repository.DevelopmentSeedRepository
 import com.sunilsstartingseven.app.data.repository.PlayerRepository
 import com.sunilsstartingseven.app.data.repository.RosterRepository
 
@@ -19,4 +20,5 @@ class AppContainer(context: Context) {
     val games = GameRepository(database.gameDao())
     val roster = RosterRepository(database)
     val preferences = PreferenceRepository(context)
+    val developmentSeed = DevelopmentSeedRepository(database, preferences)
 }

@@ -17,7 +17,7 @@ data class Player(
     val isActive: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()
 ) {
-    val displayName: String get() = "$firstName $lastInitial."
+    val displayName: String get() = if (lastInitial.isBlank()) firstName else "$firstName $lastInitial."
 }
 
 @Entity(tableName = "games", indices = [Index("gameDate")])
