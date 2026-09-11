@@ -123,7 +123,7 @@ private fun RoleGroupsCard(history: PlayerHistorySummary) {
         Column(Modifier.fillMaxWidth().padding(Space.Normal), verticalArrangement = Arrangement.spacedBy(Space.Small)) {
             Text("Role Groups", style = MaterialTheme.typography.titleMedium)
             PositionFamily.entries.forEach { family ->
-                CountBar(family.label(), history.families[family] ?: 0, max, familyColor(family))
+                CountBar(family.label(), history.families[family] ?: 0, max, familyColor(family), labelMinWidth = 92.dp)
             }
         }
     }

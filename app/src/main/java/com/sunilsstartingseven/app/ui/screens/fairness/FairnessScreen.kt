@@ -162,9 +162,22 @@ fun PositionFamily.label(): String = when (this) {
 }
 
 @Composable
-fun CountBar(label: String, count: Int, max: Int, color: Color, modifier: Modifier = Modifier) {
+fun CountBar(
+    label: String,
+    count: Int,
+    max: Int,
+    color: Color,
+    modifier: Modifier = Modifier,
+    labelMinWidth: androidx.compose.ui.unit.Dp = 48.dp
+) {
     Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.Small)) {
-        Text(label, Modifier.width(48.dp), style = MaterialTheme.typography.labelMedium)
+        Text(
+            label,
+            Modifier.widthIn(min = labelMinWidth),
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
         Box(Modifier.weight(1f).height(10.dp).background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.small)) {
             Box(
                 Modifier
@@ -173,6 +186,6 @@ fun CountBar(label: String, count: Int, max: Int, color: Color, modifier: Modifi
                     .background(color, MaterialTheme.shapes.small)
             )
         }
-        Text("$count", Modifier.width(32.dp), style = MaterialTheme.typography.labelMedium)
+        Text("$count", Modifier.width(32.dp), style = MaterialTheme.typography.labelMedium, textAlign = androidx.compose.ui.text.style.TextAlign.End)
     }
 }
