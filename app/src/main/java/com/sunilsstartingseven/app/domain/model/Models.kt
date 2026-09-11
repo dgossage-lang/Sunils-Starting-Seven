@@ -4,12 +4,12 @@ enum class GameStatus(val label: String) { DRAFT("Draft"), READY("Ready"), PLAYE
 enum class AttendanceStatus(val label: String) { AVAILABLE("Playing"), AWAY("Away") }
 enum class PositionFamily { GK, DEF, WING, MID, ATT }
 enum class PlayingPosition(val family: PositionFamily, val shortLabel: String, val fullLabel: String, val x: Float, val y: Float) {
-    STRIKER(PositionFamily.ATT, "ST", "Striker", .50f, .14f),
-    LEFT_WING(PositionFamily.WING, "LW", "Left wing", .20f, .33f),
-    MID(PositionFamily.MID, "MID", "Midfielder", .50f, .39f),
-    RIGHT_WING(PositionFamily.WING, "RW", "Right wing", .80f, .33f),
-    DEFENDER_1(PositionFamily.DEF, "D1", "Defender 1", .34f, .62f),
-    DEFENDER_2(PositionFamily.DEF, "D2", "Defender 2", .66f, .62f),
+    STRIKER(PositionFamily.ATT, "ST", "Striker", .50f, .19f),
+    LEFT_WING(PositionFamily.WING, "LW", "Left wing", .20f, .38f),
+    MID(PositionFamily.MID, "MID", "Midfielder", .50f, .43f),
+    RIGHT_WING(PositionFamily.WING, "RW", "Right wing", .80f, .38f),
+    DEFENDER_1(PositionFamily.DEF, "D1", "Defender 1", .34f, .67f),
+    DEFENDER_2(PositionFamily.DEF, "D2", "Defender 2", .66f, .67f),
     GOALKEEPER(PositionFamily.GK, "GK", "Goalkeeper", .50f, .84f)
 }
 enum class PlayingState { ON_FIELD, BENCH }

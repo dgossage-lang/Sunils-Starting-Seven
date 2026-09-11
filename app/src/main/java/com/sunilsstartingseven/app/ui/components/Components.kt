@@ -16,11 +16,15 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.sunilsstartingseven.app.data.local.Player
 import com.sunilsstartingseven.app.domain.model.*
 import com.sunilsstartingseven.app.ui.theme.*
+
+private const val PitchAspectRatio = 0.82f
 
 @Composable
 fun PrimaryAction(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
@@ -93,7 +97,7 @@ fun RotationSelector(selected: Int, onSelected: (Int) -> Unit, modifier: Modifie
 
 @Composable
 fun SoccerPitch(modifier: Modifier = Modifier) {
-    Canvas(modifier.aspectRatio(1.45f).clip(RoundedCornerShape(24.dp)).semantics { contentDescription = "Empty seven-a-side soccer pitch" }) {
+    Canvas(modifier.aspectRatio(PitchAspectRatio).clip(RoundedCornerShape(24.dp)).semantics { contentDescription = "Portrait seven-a-side soccer pitch with goals at the top and bottom" }) {
         drawRect(Brand.Primary)
         for (stripe in 0..5 step 2) drawRect(Brand.Green, Offset(0f, size.height * stripe / 6), Size(size.width, size.height / 6))
         val inset = size.minDimension * .08f
@@ -104,12 +108,30 @@ fun SoccerPitch(modifier: Modifier = Modifier) {
         val line = Color.White.copy(alpha = .75f)
         val stroke = Stroke(2.dp.toPx())
         drawRect(line, Offset(left, top), Size(w, h), style = stroke)
-        drawLine(line, Offset(size.width / 2, top), Offset(size.width / 2, top + h), stroke.width)
-        drawCircle(line, h * .19f, center, style = stroke)
+        drawLine(line, Offset(left, size.height / 2), Offset(left + w, size.height / 2), stroke.width)
+        drawCircle(line, w * .24f, center, style = stroke)
         drawCircle(line, 2.5.dp.toPx(), center)
-        for (right in listOf(false, true)) {
-            drawRect(line, Offset(if (right) left + w * .82f else left, top + h * .23f), Size(w * .18f, h * .54f), style = stroke)
-            drawRect(line, Offset(if (right) left + w * .93f else left, top + h * .37f), Size(w * .07f, h * .26f), style = stroke)
+        for (bottom in listOf(false, true)) {
+            val penaltyHeight = h * .18f
+            val goalAreaHeight = h * .07f
+            drawRect(
+                line,
+                Offset(left + w * .23f, if (bottom) top + h - penaltyHeight else top),
+                Size(w * .54f, penaltyHeight),
+                style = stroke
+            )
+            drawRect(
+                line,
+                Offset(left + w * .37f, if (bottom) top + h - goalAreaHeight else top),
+                Size(w * .26f, goalAreaHeight),
+                style = stroke
+            )
+            drawRect(
+                line,
+                Offset(left + w * .42f, if (bottom) top + h else top - h * .025f),
+                Size(w * .16f, h * .025f),
+                style = stroke
+            )
         }
     }
 }
@@ -124,20 +146,37 @@ fun PositionColor(family: PositionFamily): Color = when (family) {
 }
 
 @Composable
-fun PitchPlayerCard(player: Player?, position: PlayingPosition, modifier: Modifier = Modifier) {
+fun PitchPlayerCard(
+    player: Player?,
+    position: PlayingPosition,
+    modifier: Modifier = Modifier,
+    width: Dp = 74.dp,
+    height: Dp = 56.dp
+) {
     val accent = PositionColor(position.family)
     Surface(
-        modifier.semantics { contentDescription = "${position.fullLabel} position" },
+        modifier.width(width).height(height).semantics { contentDescription = "${position.fullLabel} position" },
         color = Color.White,
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 3.dp,
         shadowElevation = 2.dp
     ) {
-        Column(Modifier.widthIn(min = 56.dp, max = 82.dp).padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Surface(color = accent, shape = MaterialTheme.shapes.small) {
-                Text(position.shortLabel, Modifier.padding(horizontal = 7.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall)
+        Column(Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            if (player == null) {
+                Text(position.shortLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
+            } else {
+                Surface(color = accent, shape = MaterialTheme.shapes.small) {
+                    Text(position.shortLabel, Modifier.padding(horizontal = 7.dp, vertical = 2.dp), style = MaterialTheme.typography.labelSmall)
+                }
+                Text(
+                    player.firstName,
+                    style = MaterialTheme.typography.labelMedium,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
             }
-            Text(player?.firstName ?: position.shortLabel, style = MaterialTheme.typography.labelMedium, maxLines = 1, textAlign = TextAlign.Center)
         }
     }
 }
@@ -147,19 +186,23 @@ fun PitchLineup(
     playersByPosition: Map<PlayingPosition, Player>,
     modifier: Modifier = Modifier
 ) {
-    BoxWithConstraints(modifier) {
-        SoccerPitch(Modifier.fillMaxWidth())
+    BoxWithConstraints(modifier.aspectRatio(PitchAspectRatio)) {
+        SoccerPitch(Modifier.fillMaxSize())
         val pitchWidth = maxWidth
-        val pitchHeight = pitchWidth / 1.45f
+        val pitchHeight = maxHeight
+        val cardWidth = minOf(74.dp, pitchWidth * .23f)
+        val cardHeight = minOf(56.dp, cardWidth * .76f)
         PlayingPosition.entries.forEach { position ->
             PitchPlayerCard(
                 player = playersByPosition[position],
                 position = position,
+                width = cardWidth,
+                height = cardHeight,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .offset(
-                        x = pitchWidth * position.x - 35.dp,
-                        y = pitchHeight * position.y - 24.dp
+                        x = pitchWidth * position.x - cardWidth / 2,
+                        y = pitchHeight * position.y - cardHeight / 2
                     )
             )
         }
@@ -201,3 +244,17 @@ private fun PitchPreview() { StartingSevenTheme { SoccerPitch(Modifier.padding(1
 @Preview(showBackground = true)
 @Composable
 private fun LineupPreview() { StartingSevenTheme { PitchLineup(emptyMap(), Modifier.padding(16.dp).fillMaxWidth()) } }
+
+@Preview(showBackground = true, widthDp = 360)
+@Composable
+private fun PopulatedLineupPreview() {
+    StartingSevenTheme {
+        PitchLineup(
+            mapOf(
+                PlayingPosition.GOALKEEPER to Player(firstName = "Mason", lastInitial = "G"),
+                PlayingPosition.STRIKER to Player(firstName = "Alex", lastInitial = "T")
+            ),
+            Modifier.padding(16.dp).fillMaxWidth()
+        )
+    }
+}

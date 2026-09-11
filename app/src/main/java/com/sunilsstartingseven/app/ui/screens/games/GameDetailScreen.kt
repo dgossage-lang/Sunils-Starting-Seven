@@ -11,7 +11,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
 import com.sunilsstartingseven.app.data.local.*
 import com.sunilsstartingseven.app.domain.model.*
 import com.sunilsstartingseven.app.ui.components.*
@@ -85,13 +87,19 @@ fun GameDetailScreen(
 @Composable
 private fun AttendanceRow(player: Player, status: AttendanceStatus, busy: Boolean, onChange: (AttendanceStatus) -> Unit) {
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Row(Modifier.fillMaxWidth().padding(Space.Normal), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.Normal)) {
+        Row(Modifier.fillMaxWidth().padding(Space.Normal), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.Small)) {
             InitialsAvatar(player)
-            Column(Modifier.weight(1f)) {
-                Text(player.displayName, style = MaterialTheme.typography.titleMedium)
+            Column(Modifier.weight(1f).widthIn(min = 0.dp)) {
+                Text(
+                    player.displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
                 Text(status.label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            SingleChoiceSegmentedButtonRow {
+            SingleChoiceSegmentedButtonRow(Modifier.widthIn(max = 168.dp)) {
                 AttendanceStatus.entries.forEachIndexed { index, option ->
                     SegmentedButton(
                         selected = status == option,
@@ -112,5 +120,21 @@ private fun AttendanceRow(player: Player, status: AttendanceStatus, busy: Boolea
 private fun GameDetailPreview() {
     StartingSevenTheme {
         GameDetailScreen(Game(roundNumber = 4, gameDate = LocalDate.now()), emptyList(), emptyList(), false, {}, { _, _ -> }, {}, {}, {})
+    }
+}
+
+@Preview(showBackground = true, widthDp = 320)
+@Composable
+private fun AttendanceRowCompactPreview() {
+    StartingSevenTheme {
+        AttendanceRow(Player(firstName = "Mason-Junior", lastInitial = "G"), AttendanceStatus.AVAILABLE, false) {}
+    }
+}
+
+@Preview(showBackground = true, widthDp = 400)
+@Composable
+private fun AttendanceRowNormalPreview() {
+    StartingSevenTheme {
+        AttendanceRow(Player(firstName = "Christopher", lastInitial = "W"), AttendanceStatus.AWAY, false) {}
     }
 }
