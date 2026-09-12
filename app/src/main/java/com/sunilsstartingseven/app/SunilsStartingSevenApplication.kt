@@ -8,7 +8,6 @@ import com.sunilsstartingseven.app.data.backup.BackupRepository
 import com.sunilsstartingseven.app.data.preferences.PreferenceRepository
 import com.sunilsstartingseven.app.data.media.MediaRepository
 import com.sunilsstartingseven.app.data.repository.GameRepository
-import com.sunilsstartingseven.app.data.repository.DevelopmentSeedRepository
 import com.sunilsstartingseven.app.data.repository.PlayerRepository
 import com.sunilsstartingseven.app.data.repository.RosterRepository
 
@@ -26,5 +25,4 @@ class AppContainer(context: Context) {
     val roster = RosterRepository(database)
     val preferences = PreferenceRepository(context)
     val backup = BackupRepository(database, preferences, media)
-    val developmentSeed = DevelopmentSeedRepository(database, preferences)
 }

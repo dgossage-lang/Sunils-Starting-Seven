@@ -2,7 +2,7 @@
 
 A lightweight Android youth soccer roster app, built for a coach beside the pitch. Local-first, offline, and intended to help produce fair player rotations from attendance and playing history.
 
-**Version 0.7.0 (versionCode 7)** — development build.
+**Version 0.9.0 (versionCode 9)** — release-candidate build.
 
 No backend, login, analytics, tracking or internet permission. Players, games, attendance, generated rosters and imported photos stay in local app-owned storage. Android cloud backup and device transfer are disabled. Coaches can create and restore local `.sssbackup` files through Android's document picker without broad storage permissions.
 
@@ -13,8 +13,7 @@ Implemented:
 - Branded Kotlin / Jetpack Compose / Material 3 Android foundation.
 - Home, Team and Games navigation with useful empty states.
 - Add/edit players with first name and one uppercase last initial, validation, active/inactive filters, deactivation and reactivation.
-- A one-time development database reseed to the original roster: Nick, Cameron, Axel, Hughie, Jero, Samrith, Macson, Artie, Roman and Nico.
-- First-name-only seeded player display without dangling periods; normal manually edited players still require a valid one-letter last initial.
+- Fresh installs start empty and guide the coach to add players before creating a game.
 - Draft game creation with round number, date picker and optional notes.
 - Draft game detail/setup screen with editable round, date and notes.
 - Game-specific attendance snapshots initialized from the active team.
@@ -24,7 +23,7 @@ Implemented:
 - Fair four-rotation lineup generation for available players, including persisted on-field and bench assignments.
 - Historical fairness from Played games only: exact-position counts, position-family counts, active rotation counts and bench counts.
 - Absence compensation through history-aware scoring; Away players receive no assignments for that game and naturally fall behind for future rounds.
-- Regenerate for Draft/Ready games, replacing the roster transactionally.
+- Regenerate confirmation for Draft/Ready games, replacing the roster transactionally only after coach approval.
 - READY lifecycle after successful generation.
 - Mark as Played with confirmation; Played games become locked historical records and feed future fairness.
 - Manual tap-to-swap editing for READY lineups, including pitch-to-pitch and pitch-to-bench swaps across all four rotations in one edit session.
@@ -35,9 +34,9 @@ Implemented:
 - Player History screens reachable from Team and Fairness, showing games attended, games away, playing/bench rotations, exact-position history, role-family history, role coverage, likely next opportunities and game-by-game rotation chips.
 - Room database, repositories and lifecycle-aware Coroutines / Flow state.
 - Typed attendance, assignments, playing positions and position families.
-- DataStore Preferences foundation for team preferences and the one-time development seed version.
+- DataStore Preferences foundation for local app preferences.
 - Settings screen reachable from the Home gear, with Data & Backup actions kept out of the bottom navigation.
-- Optional player portraits and game-day photos from Android's camera capture flow or system photo picker, copied into app-owned storage with initials fallback when no photo is set.
+- Optional player portraits and game-day photos from Android's camera capture flow or system photo picker, copied into app-owned storage with a child-silhouette fallback when no photo is set.
 - Local media storage that strips metadata by re-encoding imported images, resizes portraits and game-day photos for app use, and avoids internet, cloud upload, face recognition and broad storage permissions.
 - Local `.sssbackup` archive export through Android Storage Access Framework CreateDocument, with a portable `sunils-starting-seven-backup` manifest plus referenced app-owned media files.
 - Restore backup flow through Android Storage Access Framework OpenDocument, including v1 JSON compatibility, v2 archive/media validation, preview, confirmation and transactional database replace semantics.
@@ -47,11 +46,9 @@ Only Played games contribute to historical fairness. Draft, Ready and Cancelled 
 
 Planned later: cloud backup, sharing/export conveniences and notifications.
 
-## Development seed
+## Fresh installs
 
-This development build intentionally performs a one-time seed reset. If the stored `development_seed_version` is below `1`, the app transactionally clears assignments, attendance, games and players, inserts the ten original first-name-only players, then records seed version `1` in DataStore. Subsequent launches do not wipe data again. A successful backup restore records the current development seed version after replacing the database, so restored user data is not wiped by the seed on the next app start. This mechanism is for the development milestone and can be removed cleanly in a future release.
-
-The seed creates player records only. It does not create fake games, fake historical assignments or fake fairness history.
+Fresh installs start with no players, games, attendance or history. The Home and Team screens guide the coach to add players manually. The earlier development-only startup reseed is no longer wired into app startup for this release candidate, so launching the app never clears or replaces existing local data.
 
 ## Rotation engine
 
@@ -109,9 +106,9 @@ Debug APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Tests
 
-`test` runs JVM domain tests, the rotation-engine regression suite and Robolectric persistence/backup tests against a file-backed Room database. Coverage includes validation, first-name-only display, the one-time seed, repository persistence, Room 1→2 migration, media import/replace/remove behavior, v2 archive backup round-trip, v1 JSON restore compatibility, archive safety rejection, backup seed safety/future-ID behavior, attendance behavior, roster structural validation, 7–12 player generation, Away players, transition constraints, reversed-order tie breaking, historical deficit influence, 17-round all-present balance and absence simulation.
+`test` runs JVM domain tests, the rotation-engine regression suite and Robolectric persistence/backup tests against a file-backed Room database. Coverage includes validation, repository persistence, Room 1→2 migration, media import/replace/remove behavior, v2 archive backup round-trip, v1 JSON restore compatibility, archive safety rejection, backup seed safety/future-ID behavior, attendance behavior, roster structural validation, regenerate failure safety, 7–12 player generation, Away players, transition constraints, reversed-order tie breaking, historical deficit influence, 17-round all-present balance and absence simulation.
 
-The Compose instrumentation test needs a fresh disposable emulator/app installation. It verifies the seeded roster, opens Settings from the Home gear, checks the Data & Backup actions, creates Round 1, marks Nick Away, generates fair rotations, switches rotation, marks the game Played, verifies the played roster survives activity recreation, opens the Fairness tab and opens Nick's Player History with the Away game row.
+The Compose instrumentation test needs a fresh disposable emulator/app installation. It verifies the fresh empty Home prompt, creates its own test roster through the app repository, opens Settings from the Home gear, checks the Data & Backup actions, creates Round 1, marks Artie away, generates fair rotations, switches rotation, marks the game Played, and verifies the played roster survives activity recreation.
 
 See [validation record](docs/VALIDATION.md) for actual commands and results.
 
@@ -121,7 +118,7 @@ Explicit `Application → AppContainer → Repository → ViewModel` dependencie
 
 | Table | Purpose and integrity |
 | --- | --- |
-| `players` | Auto-generated Long ID, first name, optional last initial for development seed records, active flag, nullable app-owned portrait path and creation timestamp. Display name is computed, not stored. No destructive delete API for normal UI. |
+| `players` | Auto-generated Long ID, first name, one-letter last initial for normal UI records, active flag, nullable app-owned portrait path and creation timestamp. Display name is computed, not stored. No destructive delete API for normal UI. |
 | `games` | Stable ID, positive round number, local date as epoch day, typed status, optional notes, nullable app-owned game-day photo path and creation timestamp. |
 | `attendance` | Composite game/player key, Available/Away status, indexed player FK. |
 | `assignments` | Composite game/rotation/player key, explicit On-field/Bench state and nullable exact position. Unique game/rotation/position index prevents two players in one field slot; multiple null positions support the bench. |

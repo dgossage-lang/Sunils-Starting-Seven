@@ -57,17 +57,7 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
     private val fairnessCalculator = FairnessHistoryCalculator()
     val state = mutableState.asStateFlow()
     init {
-        viewModelScope.launch {
-            try {
-                container.developmentSeed.applyDevelopmentSeedIfNeeded()
-                observe()
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                Log.e("StartingSeven", "Unable to apply development seed", error)
-                mutableState.update { it.copy(loading = false, loadFailed = true, error = "Couldn't prepare the development roster. Please retry.") }
-            }
-        }
+        observe()
     }
 
     private fun observe() {

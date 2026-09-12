@@ -216,15 +216,15 @@ fun PitchPlayerCard(
     player: Player?,
     position: PlayingPosition,
     modifier: Modifier = Modifier,
-    width: Dp = 86.dp,
-    height: Dp = 72.dp,
+    width: Dp = 82.dp,
+    height: Dp = 69.dp,
     selected: Boolean = false,
     target: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
     val positionColor = PositionTextColor(position.family)
-    val portraitWidth = minOf(31.dp, height * .42f)
-    val portraitHeight = minOf(42.dp, height * .56f)
+    val portraitWidth = minOf(29.dp, height * .42f)
+    val portraitHeight = minOf(39.dp, height * .56f)
     Surface(
         modifier.width(width).height(height)
             .clip(MaterialTheme.shapes.medium)
@@ -297,8 +297,8 @@ fun PitchLineup(
         SoccerPitch(Modifier.fillMaxSize())
         val pitchWidth = maxWidth
         val pitchHeight = maxHeight
-        val cardWidth = minOf(88.dp, maxOf(82.dp, pitchWidth * .255f))
-        val cardHeight = minOf(76.dp, maxOf(70.dp, cardWidth * .84f))
+        val cardWidth = minOf(84.dp, maxOf(78.dp, pitchWidth * .245f))
+        val cardHeight = minOf(72.dp, maxOf(66.dp, cardWidth * .84f))
         PlayingPosition.entries.forEach { position ->
             val visualY = if (position == PlayingPosition.GOALKEEPER) position.y + .025f else position.y
             PitchPlayerCard(
@@ -418,9 +418,9 @@ private fun PitchCardEmptyPreview() {
 private fun PitchCardMidfieldRowPreview() {
     StartingSevenTheme {
         Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            PitchPlayerCard(Player(1, "Cameron", ""), PlayingPosition.LEFT_WING, width = 86.dp, height = 72.dp)
-            PitchPlayerCard(Player(2, "Samrith", ""), PlayingPosition.MID, width = 86.dp, height = 72.dp)
-            PitchPlayerCard(Player(3, "Macson", ""), PlayingPosition.RIGHT_WING, width = 86.dp, height = 72.dp)
+            PitchPlayerCard(Player(1, "Cameron", ""), PlayingPosition.LEFT_WING, width = 82.dp, height = 69.dp)
+            PitchPlayerCard(Player(2, "Samrith", ""), PlayingPosition.MID, width = 82.dp, height = 69.dp)
+            PitchPlayerCard(Player(3, "Macson", ""), PlayingPosition.RIGHT_WING, width = 82.dp, height = 69.dp)
         }
     }
 }
