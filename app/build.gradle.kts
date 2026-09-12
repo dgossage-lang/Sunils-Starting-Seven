@@ -4,6 +4,9 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+fun requiredReleaseProperty(name: String): String =
+    providers.gradleProperty(name).orNull ?: throw GradleException("Missing required release signing property: $name")
+
 android {
     namespace = "com.sunilsstartingseven.app"
     compileSdk = 36
@@ -11,14 +14,27 @@ android {
         applicationId = "com.sunilsstartingseven.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 9
-        versionName = "0.9.0"
+        versionCode = 10
+        versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true; buildConfig = true }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+    signingConfigs {
+        create("release") {
+            storeFile = file(requiredReleaseProperty("SUNILS_RELEASE_STORE_FILE"))
+            storePassword = requiredReleaseProperty("SUNILS_RELEASE_STORE_PASSWORD")
+            keyAlias = requiredReleaseProperty("SUNILS_RELEASE_KEY_ALIAS")
+            keyPassword = requiredReleaseProperty("SUNILS_RELEASE_KEY_PASSWORD")
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig = signingConfigs.getByName("release")
+        }
     }
     testOptions { unitTests.isIncludeAndroidResources = true }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
