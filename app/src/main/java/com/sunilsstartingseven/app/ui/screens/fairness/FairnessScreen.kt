@@ -37,6 +37,7 @@ fun FairnessScreen(summary: TeamFairnessSummary, onPlayer: (Long) -> Unit) {
             }
         }
         item { TeamBalanceCard(summary) }
+        item { FairRotationExplanationCard() }
         item {
             Column(verticalArrangement = Arrangement.spacedBy(Space.Small)) {
                 Text("Player balance", style = MaterialTheme.typography.titleLarge)
@@ -58,6 +59,25 @@ fun FairnessScreen(summary: TeamFairnessSummary, onPlayer: (Long) -> Unit) {
         if (summary.hasPlayedHistory) {
             item { TeamPositionBalanceCard(summary) }
             item { BenchBalanceCard(summary) }
+        }
+    }
+}
+
+@Composable
+private fun FairRotationExplanationCard() {
+    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+        Column(Modifier.fillMaxWidth().padding(Space.Normal), verticalArrangement = Arrangement.spacedBy(Space.Small)) {
+            Text("How fair rotations work", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Starting Seven looks at what each player has already played and tries to give everyone a good mix of positions and playing time. It avoids keeping players in very similar roles over and over, spreads bench time around, and tries to move the goalkeeper back onto the field rather than straight to the bench.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Brand.Navy
+            )
+            Text(
+                "If someone misses a game, future lineups gradually give them more chances to catch up. Only games marked Played count toward future rotations, so saved game-day changes become part of what the app learns from.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

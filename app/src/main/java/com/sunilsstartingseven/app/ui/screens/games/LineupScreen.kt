@@ -20,6 +20,7 @@ import java.time.LocalDate
 fun LineupScreen(game: Game, attendance: List<AttendanceWithPlayer>, assignments: List<AssignmentWithPlayer>, busy: Boolean = false, onGenerate: () -> Unit = {}, onMarkPlayed: () -> Unit = {}, onSaveManualLineup: (List<RotationAssignment>, () -> Unit) -> Unit = { _, _ -> }) {
     var selectedRotation by rememberSaveable(game.id) { mutableIntStateOf(0) }
     var confirmPlayed by rememberSaveable { mutableStateOf(false) }
+    var confirmRegenerate by rememberSaveable(game.id) { mutableStateOf(false) }
     var editing by rememberSaveable(game.id) { mutableStateOf(false) }
     var selectedPlayerId by rememberSaveable(game.id) { mutableStateOf<Long?>(null) }
     var undoStack by remember(game.id) { mutableStateOf<List<List<RotationAssignment>>>(emptyList()) }
@@ -57,6 +58,7 @@ fun LineupScreen(game: Game, attendance: List<AttendanceWithPlayer>, assignments
     BackHandler(editing) { requestExit() }
 
     if (confirmPlayed) AlertDialog(onDismissRequest = { confirmPlayed = false }, title = { Text("Mark Round ${game.roundNumber} as played?") }, text = { Text("This saved roster will be included in future fairness calculations.") }, confirmButton = { TextButton({ confirmPlayed = false; onMarkPlayed() }) { Text("Mark Played") } }, dismissButton = { TextButton({ confirmPlayed = false }) { Text("Cancel") } })
+    if (confirmRegenerate) AlertDialog(onDismissRequest = { confirmRegenerate = false }, title = { Text("Regenerate rotations?") }, text = { Text("This will replace the current four rotations with a new fair lineup. Any manual lineup changes you’ve made will also be replaced.") }, confirmButton = { TextButton({ confirmRegenerate = false; onGenerate() }) { Text("Regenerate") } }, dismissButton = { TextButton({ confirmRegenerate = false }) { Text("Cancel") } })
     if (confirmDiscard) AlertDialog(onDismissRequest = { confirmDiscard = false }, title = { Text("Discard lineup changes?") }, text = { Text("Your unsaved swaps will be lost.") }, confirmButton = { TextButton({ confirmDiscard = false; exitEditing() }) { Text("Discard") } }, dismissButton = { TextButton({ confirmDiscard = false }) { Text("Keep Editing") } })
     if (showNotes) AlertDialog(onDismissRequest = { showNotes = false }, title = { Text(assessment.label) }, text = { Column(verticalArrangement = Arrangement.spacedBy(Space.Small)) { assessment.notes.forEach { Text(it.message) } } }, confirmButton = { TextButton({ showNotes = false }) { Text("Done") } })
     if (confirmFairSave) AlertDialog(onDismissRequest = { confirmFairSave = false }, title = { Text("This lineup has ${assessment.notes.size} fairness notes.") }, text = { Text("The lineup is valid. You can still save the coach’s changes.") }, confirmButton = { TextButton({ confirmFairSave = false; onSaveManualLineup(pending) { exitEditing() } }) { Text("Save Lineup") } }, dismissButton = { TextButton({ confirmFairSave = false }) { Text("Keep Editing") } })
@@ -90,7 +92,7 @@ fun LineupScreen(game: Game, attendance: List<AttendanceWithPlayer>, assignments
             Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.large) { Column(Modifier.fillMaxWidth().padding(Space.Normal), verticalArrangement = Arrangement.spacedBy(Space.Small)) {
                 Text("Fair rotation generated from attendance and playing history.", style = MaterialTheme.typography.bodyMedium)
                 if (game.status == GameStatus.READY) OutlinedButton({ editing = true; pending = persisted }, Modifier.fillMaxWidth(), enabled = !busy) { Text("Edit Lineup") }
-                if (game.status != GameStatus.PLAYED) PrimaryAction(if (busy) "Regenerating…" else "Regenerate Rotations", onGenerate, Modifier.fillMaxWidth(), canGenerate)
+                if (game.status != GameStatus.PLAYED) PrimaryAction(if (busy) "Regenerating…" else "Regenerate Rotations", { confirmRegenerate = true }, Modifier.fillMaxWidth(), canGenerate)
                 if (canMarkPlayed) OutlinedButton({ confirmPlayed = true }, Modifier.fillMaxWidth(), enabled = !busy, contentPadding = PaddingValues(Space.Normal)) { Text("Mark as Played") }
                 if (game.status == GameStatus.PLAYED) Text("Played games are locked as historical records.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } }

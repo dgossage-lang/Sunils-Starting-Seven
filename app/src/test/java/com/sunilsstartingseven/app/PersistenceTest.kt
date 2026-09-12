@@ -14,6 +14,7 @@ import com.sunilsstartingseven.app.domain.history.HistoryPlayer
 import com.sunilsstartingseven.app.domain.model.*
 import com.sunilsstartingseven.app.domain.rotation.LineupSwaps
 import com.sunilsstartingseven.app.domain.rotation.RotationAssignment
+import com.sunilsstartingseven.app.domain.rotation.RotationValidator
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -236,6 +237,80 @@ class PersistenceTest {
         assertTrue(benchPlayerHistory.exactPositions.getValue(first.position!!) >= 1)
         assertEquals(first.position, benchPlayerHistory.games.single().rotations.single { it.rotationIndex == 0 }.position)
         assertFails { roster.saveManualLineup(game, pending) }
+    }
+
+
+    @Test fun regenerateCancelLeavesExistingRosterUnchanged() = runBlocking {
+        (1..10).forEach { db.playerDao().insert(Player(firstName = "Player$it", lastInitial = "A")) }
+        val game = db.gameDao().insert(Game(roundNumber = 10, gameDate = LocalDate.now()))
+        val roster = RosterRepository(db)
+        roster.initializeAttendance(game)
+        roster.generateLineup(game)
+        val before = db.rosterDao().getAssignments(game)
+
+        // Cancel closes the dialog before calling the repository, so the saved roster is untouched.
+        val afterCancel = db.rosterDao().getAssignments(game)
+
+        assertEquals(before, afterCancel)
+    }
+
+    @Test fun regenerateConfirmSavesCompleteValidReplacement() = runBlocking {
+        (1..10).forEach { db.playerDao().insert(Player(firstName = "Player$it", lastInitial = "A")) }
+        val game = db.gameDao().insert(Game(roundNumber = 11, gameDate = LocalDate.now()))
+        val roster = RosterRepository(db)
+        roster.initializeAttendance(game)
+        roster.generateLineup(game)
+
+        roster.generateLineup(game)
+
+        val replacement = db.rosterDao().getAssignments(game)
+        val available = db.playerDao().all().map { it.id }.toSet()
+        val validation = RotationValidator().validate(replacement.map { RotationAssignment(it.playerId, it.rotationIndex, it.playingState, it.position) }, available, emptySet<Long>())
+        assertTrue(validation.errors.toString(), validation.valid)
+        assertEquals(40, replacement.size)
+        assertEquals(GameStatus.READY, db.gameDao().get(game)!!.status)
+    }
+
+    @Test fun regenerateCancelPreservesManualEditsAndConfirmReplacesThem() = runBlocking {
+        (1..10).forEach { db.playerDao().insert(Player(firstName = "Player$it", lastInitial = "A")) }
+        val game = db.gameDao().insert(Game(roundNumber = 12, gameDate = LocalDate.now()))
+        val roster = RosterRepository(db)
+        roster.initializeAttendance(game)
+        roster.generateLineup(game)
+        val generated = db.rosterDao().getAssignments(game)
+        val first = generated.first { it.rotationIndex == 0 && it.playingState == PlayingState.ON_FIELD }
+        val bench = generated.first { it.rotationIndex == 0 && it.playingState == PlayingState.BENCH }
+        val manual = LineupSwaps.swap(generated.map { RotationAssignment(it.playerId, it.rotationIndex, it.playingState, it.position) }, 0, first.playerId, bench.playerId)
+        roster.saveManualLineup(game, manual)
+        val savedManual = db.rosterDao().getAssignments(game)
+
+        // Cancel confirmation preserves the manually edited saved roster.
+        assertEquals(savedManual, db.rosterDao().getAssignments(game))
+
+        roster.generateLineup(game)
+        val regenerated = db.rosterDao().getAssignments(game)
+        val available = db.playerDao().all().map { it.id }.toSet()
+        val validation = RotationValidator().validate(regenerated.map { RotationAssignment(it.playerId, it.rotationIndex, it.playingState, it.position) }, available, emptySet<Long>())
+
+        assertNotEquals(savedManual, regenerated)
+        assertEquals(generated, regenerated)
+        assertTrue(validation.errors.toString(), validation.valid)
+    }
+
+    @Test fun regenerateFailureKeepsPreviousRoster() = runBlocking {
+        val playerIds = (1..7).map { db.playerDao().insert(Player(firstName = "Player$it", lastInitial = "A")) }
+        val game = db.gameDao().insert(Game(roundNumber = 13, gameDate = LocalDate.now()))
+        val roster = RosterRepository(db)
+        roster.initializeAttendance(game)
+        roster.generateLineup(game)
+        val before = db.rosterDao().getAssignments(game)
+
+        // Simulate attendance becoming invalid without using the repository path that intentionally clears lineups.
+        db.rosterDao().updateAttendanceStatus(game, playerIds.first(), AttendanceStatus.AWAY)
+        assertFails { roster.generateLineup(game) }
+
+        assertEquals(before, db.rosterDao().getAssignments(game))
+        assertEquals(GameStatus.READY, db.gameDao().get(game)!!.status)
     }
 
     private suspend fun assertFails(block: suspend () -> Unit) {
