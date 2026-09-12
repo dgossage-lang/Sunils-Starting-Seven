@@ -1,6 +1,8 @@
 package com.sunilsstartingseven.app.data.local
 
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.sunilsstartingseven.app.domain.model.*
 import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
@@ -30,6 +32,8 @@ interface PlayerDao {
     @Insert suspend fun insert(players: List<Player>)
     @Query("UPDATE players SET firstName = :firstName, lastInitial = :lastInitial WHERE id = :id")
     suspend fun updateName(id: Long, firstName: String, lastInitial: String): Int
+    @Query("UPDATE players SET photoPath = :photoPath WHERE id = :id")
+    suspend fun updatePhotoPath(id: Long, photoPath: String?): Int
     @Query("UPDATE players SET isActive = :active WHERE id = :id") suspend fun setActive(id: Long, active: Boolean): Int
     @Query("DELETE FROM players") suspend fun deleteAll()
 }
@@ -44,6 +48,7 @@ interface GameDao {
     @Query("UPDATE games SET roundNumber = :roundNumber, gameDate = :date, notes = :notes WHERE id = :id AND status = 'DRAFT'")
     suspend fun updateDraftDetails(id: Long, roundNumber: Int, date: LocalDate, notes: String): Int
     @Query("UPDATE games SET status = :status WHERE id = :id") suspend fun updateStatus(id: Long, status: GameStatus): Int
+    @Query("UPDATE games SET photoPath = :photoPath WHERE id = :id") suspend fun updatePhotoPath(id: Long, photoPath: String?): Int
     @Query("SELECT * FROM games WHERE status = 'PLAYED' ORDER BY gameDate, roundNumber, id") suspend fun playedGames(): List<Game>
     @Query("DELETE FROM games") suspend fun deleteAll()
 }
@@ -95,10 +100,19 @@ interface RosterDao {
     suspend fun deleteAllAttendance()
 }
 
-@Database(entities = [Player::class, Game::class, GameAttendance::class, Assignment::class], version = 1, exportSchema = true)
+@Database(entities = [Player::class, Game::class, GameAttendance::class, Assignment::class], version = 2, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun playerDao(): PlayerDao
     abstract fun gameDao(): GameDao
     abstract fun rosterDao(): RosterDao
+
+    companion object {
+        val MIGRATION_1_2: Migration = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE players ADD COLUMN photoPath TEXT")
+                db.execSQL("ALTER TABLE games ADD COLUMN photoPath TEXT")
+            }
+        }
+    }
 }

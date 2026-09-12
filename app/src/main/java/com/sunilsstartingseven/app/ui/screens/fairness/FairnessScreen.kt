@@ -20,6 +20,8 @@ import com.sunilsstartingseven.app.domain.history.PlayerHistorySummary
 import com.sunilsstartingseven.app.domain.history.TeamFairnessSummary
 import com.sunilsstartingseven.app.domain.model.PositionFamily
 import com.sunilsstartingseven.app.ui.components.EmptyCard
+import com.sunilsstartingseven.app.ui.components.PhotoAvatar
+import com.sunilsstartingseven.app.ui.components.displayInitials
 import com.sunilsstartingseven.app.ui.theme.Brand
 import com.sunilsstartingseven.app.ui.theme.Space
 
@@ -96,6 +98,7 @@ private fun PlayerBalanceRow(player: PlayerHistorySummary, onClick: () -> Unit) 
             .semantics { contentDescription = "Open ${player.player.displayName} history" }
     ) {
         Row(Modifier.fillMaxWidth().padding(Space.Normal), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.Normal)) {
+            PhotoAvatar(player.player.photoPath, displayInitials(player.player.displayName), player.player.displayName, size = 42.dp)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Space.Tiny)) {
                 Text(player.player.displayName, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(

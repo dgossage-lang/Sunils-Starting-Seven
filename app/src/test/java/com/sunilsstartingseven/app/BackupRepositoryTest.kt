@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider
 import com.sunilsstartingseven.app.data.backup.*
 import com.sunilsstartingseven.app.data.local.*
 import com.sunilsstartingseven.app.data.preferences.PreferenceRepository
+import com.sunilsstartingseven.app.data.media.MediaRepository
 import com.sunilsstartingseven.app.data.repository.DevelopmentSeedRepository
 import com.sunilsstartingseven.app.data.repository.PlayerRepository
 import com.sunilsstartingseven.app.data.repository.RosterRepository
@@ -23,6 +24,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.io.ByteArrayOutputStream
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35], application = android.app.Application::class)
@@ -30,6 +34,7 @@ class BackupRepositoryTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
     private lateinit var db: AppDatabase
     private lateinit var preferences: PreferenceRepository
+    private lateinit var media: MediaRepository
     private val name = "backup-test.db"
 
     private fun open() = Room.databaseBuilder(context, AppDatabase::class.java, name).allowMainThreadQueries().build()
@@ -38,16 +43,19 @@ class BackupRepositoryTest {
         context.deleteDatabase(name)
         db = open()
         preferences = PreferenceRepository(context)
+        media = MediaRepository(context, db)
+        media.clearAllMedia()
     }
 
     @After fun cleanup() {
-        db.close()
+        if (::db.isInitialized) db.close()
         context.deleteDatabase(name)
+        if (::media.isInitialized) media.clearAllMedia()
     }
 
     @Test fun completeBackupRoundTripPreservesPortableStateAndFutureIds() = runBlocking {
         createRepresentativeState()
-        val repository = BackupRepository(db, preferences)
+        val repository = BackupRepository(db, preferences, media)
         val backup = repository.createBackup(OffsetDateTime.parse("2026-09-12T08:35:20+10:00"))
         val json = BackupCodec().encode(backup)
 
@@ -61,7 +69,7 @@ class BackupRepositoryTest {
         assertEquals("Nick", db.playerDao().all().single { it.firstName == "Nick" }.displayName)
         assertFalse(db.playerDao().all().single { it.firstName == "Inactive" }.isActive)
 
-        PlayerRepository(db.playerDao()).save(null, "Future", "F")
+        PlayerRepository(db.playerDao(), media).save(null, "Future", "F")
         val nextPlayer = db.playerDao().all().single { it.firstName == "Future" }
         assertTrue(nextPlayer.id > before.players.maxOf { it.id })
         val nextGame = db.gameDao().insert(Game(roundNumber = 99, gameDate = LocalDate.of(2026, 12, 1)))
@@ -71,13 +79,13 @@ class BackupRepositoryTest {
     @Test fun exportDoesNotMutateStoredData() = runBlocking {
         createRepresentativeState()
         val before = portableSnapshot()
-        BackupRepository(db, preferences).createBackupJson()
+        BackupRepository(db, preferences, media).createBackupJson()
         assertEquals(before, portableSnapshot())
     }
 
     @Test fun restoreRejectsMalformedWrongFormatFutureVersionBrokenReferencesAndDuplicateIds() = runBlocking {
         createRepresentativeState()
-        val repository = BackupRepository(db, preferences)
+        val repository = BackupRepository(db, preferences, media)
         val original = portableSnapshot()
         val backup = repository.createBackup()
 
@@ -101,7 +109,7 @@ class BackupRepositoryTest {
         roster.markPlayed(game)
         val edited = db.rosterDao().getAssignments(game)
 
-        val repository = BackupRepository(db, preferences)
+        val repository = BackupRepository(db, preferences, media)
         val validated = repository.validateJson(repository.createBackupJson())
         db.rosterDao().deleteAllAssignments()
         db.rosterDao().deleteAllAttendance()
@@ -115,7 +123,7 @@ class BackupRepositoryTest {
 
     @Test fun restoreMarksDevelopmentSeedAppliedSoRestartDoesNotWipeRestoredData() = runBlocking {
         createRepresentativeState()
-        val repository = BackupRepository(db, preferences)
+        val repository = BackupRepository(db, preferences, media)
         val validated = repository.validateJson(repository.createBackupJson())
         preferences.setDevelopmentSeedVersion(0)
         repository.restore(validated)
@@ -126,6 +134,63 @@ class BackupRepositoryTest {
 
         assertTrue(db.playerDao().all().any { it.firstName == "Nick" && it.lastInitial.isBlank() })
         assertTrue(db.gameDao().all().isNotEmpty())
+    }
+
+    @Test fun v2ArchiveRoundTripCarriesMediaReferencesAndFiles() = runBlocking {
+        createRepresentativeState()
+        db.playerDao().updatePhotoPath(1, "media/players/player_1.jpg")
+        db.gameDao().updatePhotoPath(4, "media/games/game_4.jpg")
+        media.writeRestoredMedia("media/players/player_1.jpg", tinyJpeg())
+        media.writeRestoredMedia("media/games/game_4.jpg", tinyJpeg())
+        val before = portableSnapshot()
+        val repository = BackupRepository(db, preferences, media)
+        val bytes = ByteArrayOutputStream().also { repository.writeBackupArchive(it) }.toByteArray()
+        val validated = repository.validateBytes(bytes)
+        assertEquals(2, validated.preview.backupVersion)
+        assertEquals(1, validated.preview.playerPhotoCount)
+        assertEquals(1, validated.preview.gamePhotoCount)
+        media.clearAllMedia()
+        db.rosterDao().deleteAllAssignments(); db.rosterDao().deleteAllAttendance(); db.gameDao().deleteAll(); db.playerDao().deleteAll()
+        repository.restore(validated)
+        assertEquals(before, portableSnapshot())
+        assertNotNull(media.fileFor("media/players/player_1.jpg"))
+        assertNotNull(media.fileFor("media/games/game_4.jpg"))
+    }
+
+    @Test fun v1JsonRestoreRemainsSupportedAndClearsMediaReferences() = runBlocking {
+        createRepresentativeState()
+        val repository = BackupRepository(db, preferences, media)
+        val v1 = repository.createBackup().copy(backupVersion = 1, databaseSchemaVersion = 1, players = repository.createBackup().players.map { it.copy(photoPath = null) }, games = repository.createBackup().games.map { it.copy(photoPath = null) })
+        repository.restore(repository.validateJson(BackupCodec().encode(v1)))
+        assertTrue(db.playerDao().all().all { it.photoPath == null })
+        assertTrue(db.gameDao().all().all { it.photoPath == null })
+    }
+
+    @Test fun archiveRejectsUnsafeEntriesAndMissingManifest() = runBlocking {
+        val repository = BackupRepository(db, preferences, media)
+        assertFailsRestore(repository, zipWith("../evil.jpg", tinyJpeg()))
+        assertFailsRestore(repository, zipWith("/absolute.jpg", tinyJpeg()))
+        assertFailsRestore(repository, zipWith("media/players/player_1.exe", byteArrayOf(1, 2, 3)))
+        assertFailsRestore(repository, zipWith("media/players/player_1.jpg", tinyJpeg()))
+    }
+
+    private fun assertFailsRestore(repository: BackupRepository, bytes: ByteArray) {
+        var rejected = false
+        try { repository.validateBytes(bytes) } catch (_: Exception) { rejected = true }
+        assertTrue("Expected archive rejection", rejected)
+    }
+
+    private fun zipWith(name: String, bytes: ByteArray): ByteArray {
+        val out = ByteArrayOutputStream()
+        ZipOutputStream(out).use { zip -> zip.putNextEntry(ZipEntry(name)); zip.write(bytes); zip.closeEntry() }
+        return out.toByteArray()
+    }
+
+    private fun tinyJpeg(): ByteArray {
+        val bitmap = android.graphics.Bitmap.createBitmap(2, 2, android.graphics.Bitmap.Config.ARGB_8888)
+        val out = ByteArrayOutputStream()
+        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+        return out.toByteArray()
     }
 
     private suspend fun assertRejectsAndPreserves(repository: BackupRepository, json: String, original: PortableSnapshot) {

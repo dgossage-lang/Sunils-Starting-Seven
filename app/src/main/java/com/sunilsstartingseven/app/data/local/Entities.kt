@@ -15,7 +15,8 @@ data class Player(
     val firstName: String,
     val lastInitial: String,
     val isActive: Boolean = true,
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val photoPath: String? = null
 ) {
     val displayName: String get() = if (lastInitial.isBlank()) firstName else "$firstName $lastInitial."
 }
@@ -27,7 +28,8 @@ data class Game(
     val gameDate: LocalDate,
     val status: GameStatus = GameStatus.DRAFT,
     val notes: String = "",
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val photoPath: String? = null
 )
 
 @Entity(

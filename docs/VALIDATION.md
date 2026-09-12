@@ -1,42 +1,42 @@
 # Validation record
 
-## Prompt 006 validation
+## Prompt 007 validation
 
-Validated on 12 September 2026 on Windows, using the existing API 35 `StartingSevenApi35` emulator for instrumentation and manual Storage Access Framework checks.
+Validated on 12 September 2026 on Windows, using the existing API 35 `StartingSevenApi35` emulator for connected instrumentation. No physical Android phone was attached during this validation pass, so real-device camera hardware capture was not manually exercised.
 
 ### Commands and results
 
 | Exact command | Final result |
 | --- | --- |
-| `.\gradlew.bat test --console=plain` | PASS - 54 JVM/Robolectric tests: 5 backup, 18 domain, 5 fairness-history, 5 lineup-editing, 13 persistence and 8 rotation-engine tests. |
-| `.\gradlew.bat test assembleDebug lint --console=plain` | PASS - JVM tests, debug APK build and lint completed. Lint reported 0 errors and 21 advisory warnings. |
-| `$env:ANDROID_SERIAL='emulator-5554'; .\gradlew.bat connectedDebugAndroidTest --console=plain` | PASS - one Compose instrumentation flow on `StartingSevenApi35`, including the Home gear Settings entry point and Data & Backup actions. |
+| `.\gradlew.bat test --console=plain` | PASS - 60 JVM/Robolectric tests across 8 suites, with 0 failures, 0 errors and 0 skipped. |
+| `.\gradlew.bat test assembleDebug lint --console=plain` | PASS - JVM tests, debug APK build and lint completed. Lint reported 0 errors and 23 advisory warnings. |
+| `$env:ANDROID_SERIAL='emulator-5554'; .\gradlew.bat connectedDebugAndroidTest --console=plain` | PASS - one Compose instrumentation flow on `StartingSevenApi35`, including Settings/Data & Backup, game creation, attendance, fair rotation generation, played-game persistence and Player History. |
 
-The emulator package clear command printed `Failed` before the passing instrumentation run because the package was not installed yet; Gradle installed the app and test APKs and the connected test task completed successfully.
+The package clear command printed `Failed` before the connected test run because the package was not installed at that moment; Gradle installed the app and test APKs and `connectedDebugAndroidTest` completed successfully.
+
+### Photo and media coverage
+
+- Version is now `0.7.0` with `versionCode 7`.
+- Player portraits are optional and are stored as nullable `players.photoPath` references to app-owned files under `media/players/`.
+- Game-day photos are optional for Draft, Ready and Played games and are stored as nullable `games.photoPath` references to app-owned files under `media/games/`.
+- The UI shows portraits in Team, pitch cards, bench strip, attendance rows, Fairness rows and Player History, with initials fallback when no app-owned photo exists.
+- The media repository copies picker/camera content into app-owned storage, applies EXIF orientation, rescales to bounded dimensions, re-encodes JPEG to strip metadata and removes old files when photos are replaced or deleted.
+- Media unit tests cover player photo add/replace/remove and verify that changing a Played game photo does not change played-game status, assignments or fairness history.
+- No `INTERNET`, `CAMERA`, `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` or `MANAGE_EXTERNAL_STORAGE` permission was added. The merged debug manifest contains no `uses-permission` entries matching those names.
 
 ### Backup and restore coverage
 
-- Version is now `0.6.0` with `versionCode 6`.
-- Data & Backup is reachable from the Home gear Settings screen and is not a bottom-navigation destination.
-- Create Backup uses Android Storage Access Framework `CreateDocument` with MIME type `application/json` and a suggested `Sunils-Starting-Seven-Backup-YYYY-MM-DD_HH-mm.json` filename.
-- Restore Backup uses Android Storage Access Framework `OpenDocument`, reads the file with a size cap, validates it before mutation, shows a current-device versus backup preview, and requires destructive confirmation.
-- Restore is replace semantics, not merge. It transactionally replaces players, games, attendance and assignments while preserving IDs and saved played-lineup history.
-- The backup format contains `format = sunils-starting-seven-backup`, `backupVersion = 1`, ISO-8601 `createdAt` with offset, `appVersion`, `databaseSchemaVersion = 1`, `players`, `games`, `attendance` and `assignments`.
-- Invalid JSON, wrong format, future backup version, broken references, duplicate IDs and invalid roster structure are rejected before database mutation.
-- Export is read-only. Restore marks the current development seed version after success so a later app restart does not wipe restored data.
-- No broad storage permission and no Internet permission were added. The merged manifest contains no `INTERNET`, `READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE` or `MANAGE_EXTERNAL_STORAGE` permission.
+- Backup version 2 writes `.sssbackup` archives through Android Storage Access Framework `CreateDocument` with MIME type `application/octet-stream` and suggested filenames ending in `.sssbackup`.
+- Each v2 archive contains `manifest.json` plus referenced app-owned media files; unsafe entries, duplicate archive entries, unexpected media files, missing referenced media and oversized content are rejected.
+- Backup preview now includes player and game photo counts.
+- Legacy v1 JSON backups from Prompt 006 remain restorable and restore without media references.
+- Version 2 JSON manifests that reference media are rejected outside the `.sssbackup` archive path so media references cannot silently restore without files.
+- Restore remains replace semantics for the database while preserving IDs and historical records, then restores app-owned media and cleans orphaned app-owned media.
+- Backup tests cover v2 archive round-trip with media, v1 JSON restore compatibility and unsafe/missing archive rejection.
 
-### Manual emulator validation
+### Database and migration coverage
 
-Manual inspection on `emulator-5554` confirmed Home has only four bottom tabs: Home, Team, Games and Fairness, with Settings opened by the gear icon. The Settings screen showed app version `0.6.0`, Data & Backup, Create Backup, Restore Backup and the backup privacy note.
-
-The Create Backup flow opened the Android DocumentsUI Save picker in Downloads with the generated filename. The saved file was pulled from the emulator as `verification/prompt006-backup.json`; it contained the portable format marker, backup version `1`, app version `0.6.0`, schema version `1`, players, games, attendance and assignments arrays, and no visible local machine paths or device/account identifiers.
-
-The Restore Backup flow opened the Android document picker, selected the saved JSON file, showed the restore preview, displayed the destructive confirmation dialog, and returned to Home after restore with 10 active players. Evidence screenshots are stored under `verification/`, including `prompt006-settings.png`, `prompt006-create-picker2.png`, `prompt006-restore-preview.png`, `prompt006-restore-confirm.png` and `prompt006-restore-complete.png`.
-
-### Database and build outputs
-
-No Room schema change was made. Database version remains 1; no migration was introduced.
+Room database version is now 2. `MIGRATION_1_2` adds nullable `photoPath` columns to `players` and `games`. The migration test creates a version 1 database, runs the Room migration path, verifies existing player/game rows remain readable and confirms both new columns default to null.
 
 Debug APK:
 
@@ -47,7 +47,7 @@ C:\Users\Drew\Documents\GitHub\Projects\12 - Sunil's Starting Seven\app\build\ou
 Debug APK SHA-256:
 
 ```text
-F24705B522504B7366EF18D0D46725A2B028D49FFB433102387726EB629C52AA
+4501407D004589A5A7020B3BA46251E7AC339D45D5571004924EB1326A8CABF7
 ```
 
 ## Prompt 005 validation

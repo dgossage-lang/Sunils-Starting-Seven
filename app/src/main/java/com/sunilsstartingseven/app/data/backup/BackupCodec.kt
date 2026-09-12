@@ -17,6 +17,7 @@ class BackupCodec {
                     put("lastInitial", player.lastInitial)
                     put("isActive", player.isActive)
                     put("createdAt", player.createdAt)
+                    if (player.photoPath == null) put("photoPath", JsonNull) else put("photoPath", player.photoPath)
                 }
             }))
             put("games", JsonArray(backup.games.map { game ->
@@ -27,6 +28,7 @@ class BackupCodec {
                     put("status", game.status)
                     put("notes", game.notes)
                     put("createdAt", game.createdAt)
+                    if (game.photoPath == null) put("photoPath", JsonNull) else put("photoPath", game.photoPath)
                 }
             }))
             put("attendance", JsonArray(backup.attendance.map { row ->
@@ -60,11 +62,11 @@ class BackupCodec {
             databaseSchemaVersion = root.int("databaseSchemaVersion"),
             players = root.array("players").map { item ->
                 val row = item.jsonObject
-                BackupPlayerDto(row.long("id"), row.string("firstName"), row.string("lastInitial"), row.boolean("isActive"), row.long("createdAt"))
+                BackupPlayerDto(row.long("id"), row.string("firstName"), row.string("lastInitial"), row.boolean("isActive"), row.long("createdAt"), row.nullableString("photoPath"))
             },
             games = root.array("games").map { item ->
                 val row = item.jsonObject
-                BackupGameDto(row.long("id"), row.int("roundNumber"), row.string("gameDate"), row.string("status"), row.string("notes"), row.long("createdAt"))
+                BackupGameDto(row.long("id"), row.int("roundNumber"), row.string("gameDate"), row.string("status"), row.string("notes"), row.long("createdAt"), row.nullableString("photoPath"))
             },
             attendance = root.array("attendance").map { item ->
                 val row = item.jsonObject

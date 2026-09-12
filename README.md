@@ -2,9 +2,9 @@
 
 A lightweight Android youth soccer roster app, built for a coach beside the pitch. Local-first, offline, and intended to help produce fair player rotations from attendance and playing history.
 
-**Version 0.6.0 (versionCode 6)** — development build.
+**Version 0.7.0 (versionCode 7)** — development build.
 
-No backend, login, analytics, tracking or internet permission. Players, games, attendance and generated rosters stay in the local Room database. Android cloud backup and device transfer are disabled. Coaches can create and restore local JSON backup files through Android's document picker without broad storage permissions.
+No backend, login, analytics, tracking or internet permission. Players, games, attendance, generated rosters and imported photos stay in local app-owned storage. Android cloud backup and device transfer are disabled. Coaches can create and restore local `.sssbackup` files through Android's document picker without broad storage permissions.
 
 ## Current status
 
@@ -37,8 +37,10 @@ Implemented:
 - Typed attendance, assignments, playing positions and position families.
 - DataStore Preferences foundation for team preferences and the one-time development seed version.
 - Settings screen reachable from the Home gear, with Data & Backup actions kept out of the bottom navigation.
-- Local JSON backup export through Android Storage Access Framework CreateDocument, with a portable `sunils-starting-seven-backup` format covering players, games, attendance and assignments.
-- Restore backup flow through Android Storage Access Framework OpenDocument, including pre-restore validation, preview, confirmation and transactional replace semantics.
+- Optional player portraits and game-day photos from Android's camera capture flow or system photo picker, copied into app-owned storage with initials fallback when no photo is set.
+- Local media storage that strips metadata by re-encoding imported images, resizes portraits and game-day photos for app use, and avoids internet, cloud upload, face recognition and broad storage permissions.
+- Local `.sssbackup` archive export through Android Storage Access Framework CreateDocument, with a portable `sunils-starting-seven-backup` manifest plus referenced app-owned media files.
+- Restore backup flow through Android Storage Access Framework OpenDocument, including v1 JSON compatibility, v2 archive/media validation, preview, confirmation and transactional database replace semantics.
 - Local Poppins fonts, adaptive launcher icon and Android splash screen without an artificial delay.
 
 Only Played games contribute to historical fairness. Draft, Ready and Cancelled games are excluded, and Away attendance is visible so absences do not make a player look unfairly behind.
@@ -72,11 +74,15 @@ The Fairness tab derives its dashboard from the same persisted historical truth 
 
 Participation labels use active rotations per attended Played game, rather than raw lifetime totals, so a player who missed matches is compared by opportunity rate. The app waits for at least three attended Played games before showing stronger labels such as Balanced, Needs opportunity or Slightly ahead; earlier records show as Building history. Exact-position and role-family summaries use the seven field positions and their families: GK, DEF, WING, MID and ATT.
 
-## Local backup and restore
+## Local photos, backup and restore
 
-The Settings screen is opened from the Home gear so Data & Backup stays separate from the main coaching tabs. Create Backup launches Android's document picker with MIME type `application/json` and a suggested filename like `Sunils-Starting-Seven-Backup-YYYY-MM-DD_HH-mm.json`. Restore Backup launches the document picker for JSON/text files, validates the selected file before changing data, shows a preview of the current device versus the backup, and requires a destructive confirmation.
+Player portraits are optional and can be added from the Team edit flow or by tapping a player avatar. Game-day photos are optional and live on the game detail screen for Draft, Ready and Played games. Both flows use Android camera capture or the system photo picker, then copy the selected image into app-owned local storage. The app stores only the app copy, uses initials when a portrait is missing, and does not request camera, media-library, storage or internet permissions.
 
-The JSON format is portable and explicit: `format`, `backupVersion`, `createdAt`, `appVersion`, `databaseSchemaVersion`, `players`, `games`, `attendance` and `assignments`. It does not include Android DataStore internals, the development seed marker, local file paths, device identifiers or account identifiers. Restore is replace semantics, not merge: players, games, attendance and assignments are replaced in one Room transaction while preserving IDs and history. Invalid JSON, wrong format, future backup versions, duplicate IDs and broken references are rejected before mutation.
+Imported media is re-encoded as JPEG in app-owned storage under `media/players/` or `media/games/`, with EXIF orientation applied and source metadata stripped. Player portraits are bounded to a smaller edge size than game-day photos. Replacing or removing a photo cleans the old app-owned file without changing player identity, attendance, lineup history or fairness history.
+
+The Settings screen is opened from the Home gear so Data & Backup stays separate from the main coaching tabs. Create Backup launches Android's document picker with MIME type `application/octet-stream` and a suggested filename like `Sunils-Starting-Seven-Backup-YYYY-MM-DD_HH-mm.sssbackup`. Restore Backup accepts `.sssbackup`, zip and legacy JSON/text files, validates the selected file before changing data, shows a preview of the current device versus the backup including photo counts, and requires a destructive confirmation.
+
+Backup version 2 is a zip-based `.sssbackup` archive containing `manifest.json` plus referenced app-owned media files. The manifest remains portable and explicit: `format`, `backupVersion`, `createdAt`, `appVersion`, `databaseSchemaVersion`, `players`, `games`, `attendance` and `assignments`, with nullable `photoPath` references for players and games. It does not include Android DataStore internals, the development seed marker, absolute local file paths, device identifiers or account identifiers. Version 1 JSON backups from the previous milestone still restore without photos. Restore is replace semantics, not merge: players, games, attendance and assignments are replaced while preserving IDs and history, then app-owned media is restored and orphaned files are cleaned. Invalid JSON, wrong format, future backup versions, duplicate IDs, broken references, unsafe archive entries and missing media files are rejected before database mutation.
 
 ## Build
 
@@ -103,7 +109,7 @@ Debug APK: `app/build/outputs/apk/debug/app-debug.apk`.
 
 ## Tests
 
-`test` runs JVM domain tests, the rotation-engine regression suite and Robolectric persistence/backup tests against a file-backed Room database. Coverage includes validation, first-name-only display, the one-time seed, repository persistence, backup round-trip/restore rejection/seed safety/future-ID behavior, attendance behavior, roster structural validation, 7–12 player generation, Away players, transition constraints, reversed-order tie breaking, historical deficit influence, 17-round all-present balance and absence simulation.
+`test` runs JVM domain tests, the rotation-engine regression suite and Robolectric persistence/backup tests against a file-backed Room database. Coverage includes validation, first-name-only display, the one-time seed, repository persistence, Room 1→2 migration, media import/replace/remove behavior, v2 archive backup round-trip, v1 JSON restore compatibility, archive safety rejection, backup seed safety/future-ID behavior, attendance behavior, roster structural validation, 7–12 player generation, Away players, transition constraints, reversed-order tie breaking, historical deficit influence, 17-round all-present balance and absence simulation.
 
 The Compose instrumentation test needs a fresh disposable emulator/app installation. It verifies the seeded roster, opens Settings from the Home gear, checks the Data & Backup actions, creates Round 1, marks Nick Away, generates fair rotations, switches rotation, marks the game Played, verifies the played roster survives activity recreation, opens the Fairness tab and opens Nick's Player History with the Away game row.
 
@@ -115,8 +121,8 @@ Explicit `Application → AppContainer → Repository → ViewModel` dependencie
 
 | Table | Purpose and integrity |
 | --- | --- |
-| `players` | Auto-generated Long ID, first name, optional last initial for development seed records, active flag and creation timestamp. Display name is computed, not stored. No destructive delete API for normal UI. |
-| `games` | Stable ID, positive round number, local date as epoch day, typed status, optional notes and creation timestamp. |
+| `players` | Auto-generated Long ID, first name, optional last initial for development seed records, active flag, nullable app-owned portrait path and creation timestamp. Display name is computed, not stored. No destructive delete API for normal UI. |
+| `games` | Stable ID, positive round number, local date as epoch day, typed status, optional notes, nullable app-owned game-day photo path and creation timestamp. |
 | `attendance` | Composite game/player key, Available/Away status, indexed player FK. |
 | `assignments` | Composite game/rotation/player key, explicit On-field/Bench state and nullable exact position. Unique game/rotation/position index prevents two players in one field slot; multiple null positions support the bench. |
 

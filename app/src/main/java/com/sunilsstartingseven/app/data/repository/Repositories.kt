@@ -1,13 +1,16 @@
 package com.sunilsstartingseven.app.data.repository
 
+import android.content.ContentResolver
+import android.net.Uri
 import androidx.room.withTransaction
 import com.sunilsstartingseven.app.data.local.*
 import com.sunilsstartingseven.app.data.preferences.PreferenceRepository
+import com.sunilsstartingseven.app.data.media.MediaRepository
 import com.sunilsstartingseven.app.domain.model.*
 import com.sunilsstartingseven.app.domain.rotation.*
 import java.time.LocalDate
 
-class PlayerRepository(private val dao: PlayerDao) {
+class PlayerRepository(private val dao: PlayerDao, private val media: MediaRepository? = null) {
     val players = dao.observeAll()
     suspend fun save(id: Long?, firstName: String, lastInitial: String) {
         require(PlayerInput.validate(firstName, lastInitial).isValid) { "Invalid player name." }
@@ -19,9 +22,11 @@ class PlayerRepository(private val dao: PlayerDao) {
     suspend fun setActive(id: Long, active: Boolean) {
         check(dao.setActive(id, active) == 1) { "Player no longer exists." }
     }
+    suspend fun setPhoto(id: Long, resolver: ContentResolver, uri: Uri) = requireNotNull(media) { "Media storage is not available." }.setPlayerPhoto(id, resolver, uri)
+    suspend fun removePhoto(id: Long) = requireNotNull(media) { "Media storage is not available." }.removePlayerPhoto(id)
 }
 
-class GameRepository(private val dao: GameDao) {
+class GameRepository(private val dao: GameDao, private val media: MediaRepository? = null) {
     val games = dao.observeAll()
     suspend fun createDraft(roundNumber: Int, date: LocalDate, notes: String) {
         require(roundNumber > 0) { "Round number must be positive." }
@@ -31,6 +36,8 @@ class GameRepository(private val dao: GameDao) {
         require(roundNumber > 0) { "Round number must be positive." }
         check(dao.updateDraftDetails(id, roundNumber, date, notes.trim()) == 1) { "Draft game no longer exists or is not editable." }
     }
+    suspend fun setPhoto(id: Long, resolver: ContentResolver, uri: Uri) = requireNotNull(media) { "Media storage is not available." }.setGamePhoto(id, resolver, uri)
+    suspend fun removePhoto(id: Long) = requireNotNull(media) { "Media storage is not available." }.removeGamePhoto(id)
 }
 
 class DevelopmentSeedRepository(private val db: AppDatabase, private val preferences: PreferenceRepository) {

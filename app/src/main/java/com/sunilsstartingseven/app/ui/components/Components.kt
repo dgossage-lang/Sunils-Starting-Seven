@@ -1,6 +1,8 @@
 package com.sunilsstartingseven.app.ui.components
 
+import android.graphics.BitmapFactory
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -10,10 +12,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -48,21 +54,32 @@ fun EmptyCard(title: String, message: String, action: String, onAction: () -> Un
 }
 
 @Composable
-fun InitialsAvatar(player: Player, modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .size(44.dp)
-            .clip(MaterialTheme.shapes.large)
-            .background(MaterialTheme.colorScheme.primaryContainer),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            "${player.firstName.firstOrNull()?.uppercaseChar() ?: ""}${player.lastInitial}",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary
-        )
+fun PhotoAvatar(photoPath: String?, initials: String, contentDescription: String?, modifier: Modifier = Modifier, size: Dp = 44.dp, onClick: (() -> Unit)? = null) {
+    val context = LocalContext.current
+    val bitmap = remember(photoPath) {
+        photoPath?.let { path -> runCatching { BitmapFactory.decodeFile(java.io.File(context.filesDir, path).absolutePath)?.asImageBitmap() }.getOrNull() }
+    }
+    val base = modifier.size(size).clip(MaterialTheme.shapes.large).then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+    if (bitmap != null) {
+        Image(bitmap, contentDescription, base, contentScale = ContentScale.Crop)
+    } else {
+        Box(base.background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
+            Text(initials.ifBlank { "?" }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        }
     }
 }
+
+@Composable
+fun PlayerAvatar(player: Player, modifier: Modifier = Modifier, size: Dp = 44.dp, onClick: (() -> Unit)? = null) {
+    PhotoAvatar(player.photoPath, player.initials(), player.displayName, modifier, size, onClick)
+}
+
+@Composable
+fun InitialsAvatar(player: Player, modifier: Modifier = Modifier) { PlayerAvatar(player, modifier) }
+
+fun Player.initials(): String = "${firstName.firstOrNull()?.uppercaseChar() ?: ""}$lastInitial".ifBlank { "?" }
+fun displayInitials(displayName: String): String = displayName.split(" ").filter { it.isNotBlank() }.take(2).mapNotNull { it.firstOrNull()?.uppercaseChar()?.toString() }.joinToString("").ifBlank { "?" }
+
 
 @Composable
 fun AttendanceSummaryRow(summary: AttendanceSummary, modifier: Modifier = Modifier) {
@@ -172,10 +189,11 @@ fun PitchPlayerCard(
         shadowElevation = if (selected) 6.dp else 2.dp,
         border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.secondary) else if (target) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
     ) {
-        Column(Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        Column(Modifier.padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             if (player == null) {
                 Text(position.shortLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
             } else {
+                PlayerAvatar(player, size = 20.dp)
                 Text(
                     player.displayName,
                     style = MaterialTheme.typography.labelSmall,
@@ -210,7 +228,7 @@ fun PitchLineup(
         val pitchWidth = maxWidth
         val pitchHeight = maxHeight
         val cardWidth = minOf(74.dp, pitchWidth * .23f)
-        val cardHeight = minOf(56.dp, cardWidth * .76f)
+        val cardHeight = minOf(68.dp, cardWidth * .92f)
         PlayingPosition.entries.forEach { position ->
             PitchPlayerCard(
                 player = playersByPosition[position],
@@ -255,7 +273,7 @@ fun BenchStrip(players: List<Player>, expectedBench: Int, modifier: Modifier = M
                             border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.secondary) else if (selectedPlayerId != null) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
                         ) {
                             Column(Modifier.padding(Space.Small), horizontalAlignment = Alignment.CenterHorizontally) {
-                                InitialsAvatar(player, Modifier.size(36.dp))
+                                PlayerAvatar(player, Modifier, 36.dp)
                                 Text(
                                     player.displayName,
                                     style = MaterialTheme.typography.labelSmall,

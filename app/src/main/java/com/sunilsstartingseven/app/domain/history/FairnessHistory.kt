@@ -12,7 +12,7 @@ import kotlin.math.abs
 
 private fun percent(value: Int, total: Int): Int = if (total == 0) 0 else ((value.toDouble() / total) * 100).toInt()
 
-data class HistoryPlayer(val id: Long, val displayName: String, val isActive: Boolean)
+data class HistoryPlayer(val id: Long, val displayName: String, val isActive: Boolean, val photoPath: String? = null)
 data class HistoryGame(val id: Long, val roundNumber: Int, val gameDate: LocalDate, val status: GameStatus)
 data class HistoryAttendance(val gameId: Long, val playerId: Long, val status: AttendanceStatus)
 data class HistoryAssignment(val gameId: Long, val rotationIndex: Int, val playerId: Long, val playingState: PlayingState, val position: PlayingPosition?)

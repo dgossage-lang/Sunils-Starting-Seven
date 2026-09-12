@@ -8,8 +8,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.sunilsstartingseven.app.AppContainer
 import com.sunilsstartingseven.app.data.backup.BackupException
-import com.sunilsstartingseven.app.data.backup.MAX_BACKUP_BYTES
+import com.sunilsstartingseven.app.data.backup.MAX_ARCHIVE_BACKUP_BYTES
 import com.sunilsstartingseven.app.data.backup.ValidatedBackup
+import com.sunilsstartingseven.app.data.media.MediaException
 import com.sunilsstartingseven.app.data.local.*
 import com.sunilsstartingseven.app.domain.history.FairnessHistoryCalculator
 import com.sunilsstartingseven.app.domain.history.HistoryAssignment
@@ -84,7 +85,7 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
                     attendance = attendance.groupBy { it.attendance.gameId },
                     assignments = assignments.groupBy { it.assignment.gameId },
                     fairness = fairnessCalculator.calculate(
-                        players = players.map { HistoryPlayer(it.id, it.displayName, it.isActive) },
+                        players = players.map { HistoryPlayer(it.id, it.displayName, it.isActive, it.photoPath) },
                         games = games.map { HistoryGame(it.id, it.roundNumber, it.gameDate, it.status) },
                         attendance = flatAttendance,
                         assignments = flatAssignments
@@ -97,7 +98,7 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
                     Log.e("StartingSeven", "Unable to read local team data", error)
                     mutableState.update { it.copy(loading = false, loadFailed = true, error = "Couldn't load your team. Please retry.") }
                 }
-                .collect { next -> mutableState.update { next.copy(saving = it.saving, error = it.error) } }
+                .collect { next -> mutableState.update { next.copy(saving = it.saving, error = it.error, backupMessage = it.backupMessage, restorePreview = it.restorePreview) } }
         }
     }
 
@@ -161,7 +162,7 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
         write(onSuccess) { container.roster.saveManualLineup(gameId, assignments) }
 
     fun backupFileName(now: LocalDateTime = LocalDateTime.now()): String =
-        "Sunils-Starting-Seven-Backup-${now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm"))}.json"
+        "Sunils-Starting-Seven-Backup-${now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm"))}.sssbackup"
 
     fun exportBackup(resolver: ContentResolver, uri: Uri) {
         if (state.value.saving || state.value.loading || state.value.loadFailed) return
@@ -169,8 +170,7 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    val json = container.backup.createBackupJson()
-                    resolver.openOutputStream(uri, "wt")?.use { stream -> stream.write(json.toByteArray(Charsets.UTF_8)) }
+                    resolver.openOutputStream(uri, "wt")?.use { stream -> container.backup.writeBackupArchive(stream) }
                         ?: throw BackupException("The backup file could not be opened for writing.")
                 }
                 mutableState.update { it.copy(backupMessage = "Backup created") }
@@ -191,12 +191,12 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             try {
                 val validated = withContext(Dispatchers.IO) {
-                    val text = resolver.openInputStream(uri)?.use { stream ->
-                        val bytes = stream.readCapped(MAX_BACKUP_BYTES)
-                        if (bytes.size > MAX_BACKUP_BYTES) throw BackupException("This backup file is too large to restore.")
-                        bytes.toString(Charsets.UTF_8)
+                    val bytes = resolver.openInputStream(uri)?.use { stream ->
+                        val data = stream.readCapped(MAX_ARCHIVE_BACKUP_BYTES)
+                        if (data.size > MAX_ARCHIVE_BACKUP_BYTES) throw BackupException("This backup file is too large to restore.")
+                        data
                     } ?: throw BackupException("The backup file could not be opened.")
-                    container.backup.validateJson(text)
+                    container.backup.validateBytes(bytes)
                 }
                 mutableState.update { it.copy(restorePreview = validated) }
             } catch (error: CancellationException) {
@@ -209,6 +209,14 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
             }
         }
     }
+
+    fun setPlayerPhoto(playerId: Long, resolver: ContentResolver, uri: Uri) = write { container.players.setPhoto(playerId, resolver, uri) }
+
+    fun removePlayerPhoto(playerId: Long) = write { container.players.removePhoto(playerId) }
+
+    fun setGamePhoto(gameId: Long, resolver: ContentResolver, uri: Uri) = write { container.games.setPhoto(gameId, resolver, uri) }
+
+    fun removeGamePhoto(gameId: Long) = write { container.games.removePhoto(gameId) }
 
     fun restoreBackup(onSuccess: () -> Unit) {
         val validated = state.value.restorePreview ?: return
@@ -230,7 +238,7 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    private fun Exception.userMessage(fallback: String): String = if (this is BackupException) message ?: fallback else fallback
+    private fun Exception.userMessage(fallback: String): String = if (this is BackupException || this is MediaException) message ?: fallback else fallback
 
     private fun java.io.InputStream.readCapped(maxBytes: Int): ByteArray {
         val output = java.io.ByteArrayOutputStream()

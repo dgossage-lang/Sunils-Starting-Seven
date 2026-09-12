@@ -29,12 +29,12 @@ fun SettingsScreen(
         Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
             Column(Modifier.fillMaxWidth().padding(Space.Large), verticalArrangement = Arrangement.spacedBy(Space.Medium)) {
                 Text("Data & Backup", style = MaterialTheme.typography.titleLarge)
-                Text("Keep a copy of your players, games and rotation history.", style = MaterialTheme.typography.bodyMedium)
+                Text("Keep a copy of your players, games, photos and rotation history.", style = MaterialTheme.typography.bodyMedium)
                 PrimaryAction("Create Backup", onCreateBackup, Modifier.fillMaxWidth(), !state.saving)
                 OutlinedButton(onRestoreBackup, Modifier.fillMaxWidth().heightIn(min = 52.dp), enabled = !state.saving, shape = MaterialTheme.shapes.medium) {
                     Text("Restore Backup")
                 }
-                Text("Backup files contain team and game information. Store them somewhere you trust.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Backup files can contain team and game photos. Store them somewhere you trust.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         state.restorePreview?.let { validated ->
@@ -52,7 +52,7 @@ fun SettingsScreen(
         AlertDialog(
             onDismissRequest = { if (!state.saving) confirmRestore = false },
             title = { Text("Restore this backup?") },
-            text = { Text("Your current players, games and rotation history will be replaced by the selected backup.") },
+            text = { Text("Your current players, games, photos and rotation history will be replaced by the selected backup.") },
             confirmButton = {
                 Button({
                     confirmRestore = false
@@ -83,6 +83,7 @@ private fun RestorePreviewCard(
             Text("Played: ${backup.playedCount}", style = MaterialTheme.typography.bodyMedium)
             Text("Draft / Ready: ${backup.draftCount + backup.readyCount}", style = MaterialTheme.typography.bodyMedium)
             Text("Cancelled: ${backup.cancelledCount}", style = MaterialTheme.typography.bodyMedium)
+            Text("Photos: ${backup.playerPhotoCount} player - ${backup.gamePhotoCount} game", style = MaterialTheme.typography.bodyMedium)
             Text("This will replace the data currently stored on this device.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.Small)) {
                 OutlinedButton(onCancel, Modifier.weight(1f), enabled = !busy) { Text("Cancel") }

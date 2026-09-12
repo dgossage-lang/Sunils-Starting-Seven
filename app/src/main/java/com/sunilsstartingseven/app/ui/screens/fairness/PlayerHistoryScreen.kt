@@ -18,6 +18,8 @@ import com.sunilsstartingseven.app.domain.model.PositionFamily
 import com.sunilsstartingseven.app.domain.rotation.FieldPositions
 import com.sunilsstartingseven.app.domain.rotation.ROTATION_COUNT
 import com.sunilsstartingseven.app.ui.components.PositionColor
+import com.sunilsstartingseven.app.ui.components.PhotoAvatar
+import com.sunilsstartingseven.app.ui.components.displayInitials
 import com.sunilsstartingseven.app.ui.theme.Space
 import java.time.format.DateTimeFormatter
 
@@ -52,11 +54,7 @@ fun PlayerHistoryScreen(history: PlayerHistorySummary?, onGame: (Long) -> Unit) 
 @Composable
 private fun PlayerHeader(history: PlayerHistorySummary) {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.Normal)) {
-        Surface(Modifier.size(56.dp), color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.large) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(history.player.displayName.initials(), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-            }
-        }
+        PhotoAvatar(history.player.photoPath, displayInitials(history.player.displayName), history.player.displayName, size = 64.dp)
         Column(Modifier.weight(1f)) {
             Text(history.player.displayName, style = MaterialTheme.typography.headlineMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(if (history.player.isActive) "Active player" else "Inactive player", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -65,10 +63,6 @@ private fun PlayerHeader(history: PlayerHistorySummary) {
     }
 }
 
-private fun String.initials(): String {
-    val parts = trim().split(" ").filter { it.isNotBlank() }
-    return parts.take(2).mapNotNull { it.firstOrNull()?.uppercaseChar()?.toString() }.joinToString("").ifBlank { "?" }
-}
 
 @Composable
 private fun ParticipationCard(history: PlayerHistorySummary) {

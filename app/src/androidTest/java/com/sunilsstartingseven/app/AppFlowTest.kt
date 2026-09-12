@@ -15,6 +15,10 @@ class AppFlowTest {
         compose.waitUntil(10_000) { compose.onAllNodesWithText(text, substring = false).fetchSemanticsNodes().isNotEmpty() }
     }
 
+    private fun awaitContentDescription(description: String) {
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription(description, substring = false).fetchSemanticsNodes().isNotEmpty() }
+    }
+
     @Test fun seededRosterGeneratesAndPersistsPlayedLineup() {
         awaitText("Home")
         awaitText("10 active players")
@@ -30,7 +34,8 @@ class AppFlowTest {
         compose.onNodeWithText("Round number").performTextInput("1")
         compose.onNodeWithText("Notes (optional)").performTextInput("First fair rotation")
         compose.onNodeWithText("Save Draft").performScrollTo().performClick()
-        awaitText("Round 1")
+        compose.waitForIdle()
+        awaitContentDescription("Open Round 1")
         compose.onNodeWithContentDescription("Open Round 1").performClick()
         awaitText("Attendance")
         awaitText("Nick")

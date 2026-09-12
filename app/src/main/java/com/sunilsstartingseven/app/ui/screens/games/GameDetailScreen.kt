@@ -1,5 +1,7 @@
 package com.sunilsstartingseven.app.ui.screens.games
 
+import android.graphics.BitmapFactory
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -9,6 +11,9 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.contentDescription
@@ -34,7 +39,9 @@ fun GameDetailScreen(
     onAttendance: (Long, AttendanceStatus) -> Unit,
     onAddMissing: () -> Unit,
     onEdit: () -> Unit,
-    onLineup: () -> Unit
+    onLineup: () -> Unit,
+    onGamePhoto: () -> Unit,
+    onViewPhoto: () -> Unit
 ) {
     LaunchedEffect(game.id) { onInitialize() }
     val summary = attendanceSummary(attendance.map { it.attendance.status })
@@ -58,6 +65,7 @@ fun GameDetailScreen(
                 }
             }
         }
+        item { GameDayPhotoCard(game, busy, onGamePhoto, onViewPhoto) }
         item { AttendanceSummaryRow(summary) }
         if (summary.neededForFullSeven > 0) {
             item {
@@ -91,11 +99,34 @@ fun GameDetailScreen(
 }
 
 @Composable
+private fun GameDayPhotoCard(game: Game, busy: Boolean, onPhoto: () -> Unit, onViewPhoto: () -> Unit) {
+    val context = LocalContext.current
+    val bitmap = remember(game.photoPath) {
+        game.photoPath?.let { path -> runCatching { BitmapFactory.decodeFile(java.io.File(context.filesDir, path).absolutePath)?.asImageBitmap() }.getOrNull() }
+    }
+    Card {
+        Column(Modifier.fillMaxWidth().padding(Space.Normal), verticalArrangement = Arrangement.spacedBy(Space.Small)) {
+            Text("Game Day Photo", style = MaterialTheme.typography.titleMedium)
+            if (bitmap != null) {
+                Image(bitmap, "Round ${game.roundNumber} game day photo", Modifier.fillMaxWidth().height(170.dp).clip(MaterialTheme.shapes.large).clickable { onViewPhoto() }, contentScale = ContentScale.Crop)
+                Text("A local memory from this game.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                Text("Add one optional local photo as a memory of the day.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(Space.Small)) {
+                OutlinedButton(onPhoto, enabled = !busy) { Text(if (game.photoPath == null) "Add Photo" else "Photo Options") }
+                if (bitmap != null) TextButton(onViewPhoto, enabled = !busy) { Text("View") }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AttendanceRow(player: Player, status: AttendanceStatus, busy: Boolean, onChange: (AttendanceStatus) -> Unit) {
     Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Column(Modifier.fillMaxWidth().padding(Space.Normal), verticalArrangement = Arrangement.spacedBy(Space.Small)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(Space.Small)) {
-                InitialsAvatar(player)
+                PlayerAvatar(player)
                 Text(
                     player.displayName,
                     modifier = Modifier.weight(1f).widthIn(min = 0.dp),
@@ -175,7 +206,7 @@ private fun AttendanceToggleSegment(
 @Composable
 private fun GameDetailPreview() {
     StartingSevenTheme {
-        GameDetailScreen(Game(roundNumber = 4, gameDate = LocalDate.now()), emptyList(), emptyList(), false, {}, { _, _ -> }, {}, {}, {})
+        GameDetailScreen(Game(roundNumber = 4, gameDate = LocalDate.now()), emptyList(), emptyList(), false, {}, { _, _ -> }, {}, {}, {}, {}, {})
     }
 }
 
