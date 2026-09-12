@@ -25,11 +25,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.sunilsstartingseven.app.data.local.Player
 import com.sunilsstartingseven.app.domain.model.*
 import com.sunilsstartingseven.app.ui.theme.*
@@ -167,50 +169,81 @@ fun PositionColor(family: PositionFamily): Color = when (family) {
 }
 
 @Composable
+private fun PositionTextColor(family: PositionFamily): Color = when (family) {
+    PositionFamily.GK -> Brand.Warning
+    PositionFamily.DEF -> Brand.SecondaryNavy
+    PositionFamily.WING -> Brand.AccentBlue
+    PositionFamily.MID -> Brand.Primary
+    PositionFamily.ATT -> Brand.SecondaryNavy
+}
+
+@Composable
 fun PitchPlayerCard(
     player: Player?,
     position: PlayingPosition,
     modifier: Modifier = Modifier,
-    width: Dp = 74.dp,
-    height: Dp = 56.dp,
+    width: Dp = 92.dp,
+    height: Dp = 78.dp,
     selected: Boolean = false,
     target: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
-    val accent = PositionColor(position.family)
+    val positionColor = PositionTextColor(position.family)
     Surface(
         modifier.width(width).height(height)
             .clip(MaterialTheme.shapes.medium)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .semantics { contentDescription = if (player == null) "${position.fullLabel} position" else "${player.displayName}, ${position.fullLabel}" },
-        color = when { selected -> MaterialTheme.colorScheme.secondaryContainer; target -> MaterialTheme.colorScheme.primaryContainer; else -> Color.White },
+        color = when { selected -> MaterialTheme.colorScheme.secondaryContainer; target -> MaterialTheme.colorScheme.primaryContainer; else -> MaterialTheme.colorScheme.surfaceContainerLow },
         shape = MaterialTheme.shapes.medium,
         tonalElevation = 3.dp,
         shadowElevation = if (selected) 6.dp else 2.dp,
         border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.secondary) else if (target) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
     ) {
-        Column(Modifier.padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            if (player == null) {
-                Text(position.shortLabel, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurface)
-            } else {
-                PlayerAvatar(player, size = 20.dp)
-                Text(
-                    player.displayName,
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center
-                )
+        if (player == null) {
+            Box(Modifier.fillMaxSize().padding(Space.Small), contentAlignment = Alignment.Center) {
                 Text(
                     position.shortLabel,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = positionColor,
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center
                 )
+            }
+        } else {
+            Column(
+                Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 5.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    player.displayName,
+                    modifier = Modifier.fillMaxWidth(),
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold, fontSize = 12.sp, lineHeight = 14.sp),
+                    color = Brand.Navy,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center
+                )
+                Spacer(Modifier.weight(1f))
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PlayerAvatar(player, size = minOf(40.dp, height * .46f))
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        position.shortLabel,
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 22.sp, lineHeight = 24.sp),
+                        color = positionColor,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.End
+                    )
+                }
             }
         }
     }
@@ -227,9 +260,10 @@ fun PitchLineup(
         SoccerPitch(Modifier.fillMaxSize())
         val pitchWidth = maxWidth
         val pitchHeight = maxHeight
-        val cardWidth = minOf(74.dp, pitchWidth * .23f)
-        val cardHeight = minOf(68.dp, cardWidth * .92f)
+        val cardWidth = minOf(94.dp, maxOf(88.dp, pitchWidth * .27f))
+        val cardHeight = minOf(82.dp, maxOf(74.dp, cardWidth * .84f))
         PlayingPosition.entries.forEach { position ->
+            val visualY = if (position == PlayingPosition.GOALKEEPER) position.y + .02f else position.y
             PitchPlayerCard(
                 player = playersByPosition[position],
                 position = position,
@@ -242,7 +276,7 @@ fun PitchLineup(
                     .align(Alignment.TopStart)
                     .offset(
                         x = pitchWidth * position.x - cardWidth / 2,
-                        y = pitchHeight * position.y - cardHeight / 2
+                        y = pitchHeight * visualY - cardHeight / 2
                     )
             )
         }
@@ -304,10 +338,52 @@ private fun PopulatedLineupPreview() {
     StartingSevenTheme {
         PitchLineup(
             mapOf(
-                PlayingPosition.GOALKEEPER to Player(firstName = "Mason", lastInitial = "G"),
-                PlayingPosition.STRIKER to Player(firstName = "Alex", lastInitial = "T")
+                PlayingPosition.GOALKEEPER to Player(1, "Nick", "", photoPath = "media/players/preview-nick.jpg"),
+                PlayingPosition.LEFT_WING to Player(2, "Cameron", "", photoPath = "media/players/preview-cameron.jpg"),
+                PlayingPosition.MID to Player(3, "Samrith", "", photoPath = "media/players/preview-samrith.jpg"),
+                PlayingPosition.RIGHT_WING to Player(4, "Axel", ""),
+                PlayingPosition.DEFENDER_1 to Player(5, "Artie", "G"),
+                PlayingPosition.DEFENDER_2 to Player(6, "Roman", ""),
+                PlayingPosition.STRIKER to Player(7, "Hughie", "")
             ),
-            Modifier.padding(16.dp).fillMaxWidth()
+            Modifier.padding(16.dp).fillMaxWidth(),
+            selectedPlayerId = 5
         )
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PitchCardShortNameGkSelectedPreview() {
+    StartingSevenTheme { PitchPlayerCard(Player(1, "Nick", "", photoPath = "media/players/preview-nick.jpg"), PlayingPosition.GOALKEEPER, selected = true) }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PitchCardLongNameMidPreview() {
+    StartingSevenTheme { PitchPlayerCard(Player(2, "Cameron", ""), PlayingPosition.MID) }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PitchCardWingTargetPreview() {
+    StartingSevenTheme { PitchPlayerCard(Player(3, "Artie", "G"), PlayingPosition.LEFT_WING, target = true) }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun PitchCardEmptyPreview() {
+    StartingSevenTheme { PitchPlayerCard(null, PlayingPosition.STRIKER) }
+}
+
+@Preview(showBackground = true, widthDp = 320)
+@Composable
+private fun PitchCardMidfieldRowPreview() {
+    StartingSevenTheme {
+        Row(Modifier.padding(8.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            PitchPlayerCard(Player(1, "Cameron", ""), PlayingPosition.LEFT_WING, width = 88.dp, height = 74.dp)
+            PitchPlayerCard(Player(2, "Samrith", ""), PlayingPosition.MID, width = 88.dp, height = 74.dp)
+            PitchPlayerCard(Player(3, "Macson", ""), PlayingPosition.RIGHT_WING, width = 88.dp, height = 74.dp)
+        }
     }
 }
