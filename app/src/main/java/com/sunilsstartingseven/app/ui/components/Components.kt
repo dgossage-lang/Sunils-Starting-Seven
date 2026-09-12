@@ -67,9 +67,12 @@ fun PhotoAvatar(photoPath: String?, initials: String, contentDescription: String
     if (bitmap != null) {
         Image(bitmap, contentDescription, base, contentScale = ContentScale.Crop)
     } else {
-        Box(base.background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-            Text(initials.ifBlank { "?" }, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-        }
+        Image(
+            painter = painterResource(R.drawable.player_silhouette_placeholder),
+            contentDescription = contentDescription,
+            modifier = base,
+            contentScale = ContentScale.Crop
+        )
     }
 }
 
@@ -266,16 +269,17 @@ fun PitchPlayerCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     PitchPortraitTile(player, width = portraitWidth, height = portraitHeight)
-                    Spacer(Modifier.weight(1f))
-                    Text(
-                        position.shortLabel,
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp, lineHeight = 20.sp),
-                        color = positionColor,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.End
-                    )
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                        Text(
+                            position.shortLabel,
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 18.sp, lineHeight = 20.sp),
+                            color = positionColor,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
         }
