@@ -9,6 +9,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.sunilsstartingseven.app.data.local.Player
@@ -18,9 +20,10 @@ import com.sunilsstartingseven.app.ui.components.PrimaryAction
 import com.sunilsstartingseven.app.ui.theme.Space
 
 @Composable
-fun PlayerForm(editing: Boolean, initialFirst: String, initialLast: String, busy: Boolean, error: String?, onSave: (String, String) -> Unit, onCancel: () -> Unit, player: Player? = null, onPhoto: (() -> Unit)? = null) {
+fun PlayerForm(editing: Boolean, initialFirst: String, initialLast: String, busy: Boolean, error: String?, onSave: (String, String, Boolean) -> Unit, onCancel: () -> Unit, player: Player? = null, onPhoto: (() -> Unit)? = null) {
     var first by rememberSaveable { mutableStateOf(initialFirst) }
     var last by rememberSaveable { mutableStateOf(initialLast) }
+    var carry by rememberSaveable(player?.id) { mutableStateOf(player?.carryFairnessAcrossSeasons ?: false) }
     var submitted by rememberSaveable { mutableStateOf(false) }
     val validation = PlayerInput.validate(first, last)
     Column(Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(Space.Large), verticalArrangement = Arrangement.spacedBy(Space.Normal)) {
@@ -40,10 +43,18 @@ fun PlayerForm(editing: Boolean, initialFirst: String, initialLast: String, busy
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
             isError = submitted && validation.lastInitialError != null,
             supportingText = { Text(if (submitted) validation.lastInitialError ?: "Just one letter — no surname needed." else "Just one letter — no surname needed.") })
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Carry fairness across seasons", style = MaterialTheme.typography.titleSmall)
+                Text(if (carry) "Use all Played-game history for this player." else "Use only the game's season for this player.", style = MaterialTheme.typography.bodySmall)
+            }
+            Switch(carry, { carry = it }, enabled = !busy, modifier = Modifier.semantics { contentDescription = "Carry fairness across seasons" })
+        }
+        Text("This affects future generated lineups. Saved games stay unchanged.", style = MaterialTheme.typography.bodySmall)
         if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
         PrimaryAction(if (busy) "Saving…" else if (editing) "Save Player" else "Add Player", {
             submitted = true
-            if (validation.isValid) onSave(first, last)
+            if (validation.isValid) onSave(first, last, carry)
         }, Modifier.fillMaxWidth(), !busy)
         OutlinedButton(onCancel, Modifier.fillMaxWidth(), enabled = !busy, contentPadding = PaddingValues(Space.Normal)) { Text("Cancel") }
     }

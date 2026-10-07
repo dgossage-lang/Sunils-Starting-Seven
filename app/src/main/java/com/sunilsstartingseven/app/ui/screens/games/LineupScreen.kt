@@ -31,7 +31,7 @@ fun LineupScreen(game: Game, attendance: List<AttendanceWithPlayer>, assignments
     var confirmFairSave by rememberSaveable(game.id) { mutableStateOf(false) }
     val players = remember(assignments) { assignments.associate { it.player.id to it.player } }
     val names = remember(players) { players.mapValues { it.value.displayName } }
-    val summary = attendanceSummary(attendance.map { it.attendance.status })
+    val summary = attendanceSummary(attendance.map { it.attendance.status }, game.fieldPositions.size)
     val shown = if (editing) pending else persisted
     val rotation = RotationPeriods[selectedRotation]
     val rotationAssignments = shown.filter { it.rotationIndex == selectedRotation }
@@ -79,9 +79,9 @@ fun LineupScreen(game: Game, attendance: List<AttendanceWithPlayer>, assignments
                 }
             }
         }
-        PitchLineup(playersByPosition, Modifier.fillMaxWidth(), selectedPlayerId, if (editing) ::swapOrSelect else null)
+        PitchLineup(playersByPosition, Modifier.fillMaxWidth(), selectedPlayerId, if (editing) ::swapOrSelect else null, game.fieldPositions)
         if (!summary.readyForLineup) {
-            Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.large) { Text("${summary.neededForFullSeven} more ${if (summary.neededForFullSeven == 1) "player" else "players"} needed before a lineup can be generated.", Modifier.fillMaxWidth().padding(Space.Normal)) }
+            Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.large) { Text("${summary.neededForLayout} more ${if (summary.neededForLayout == 1) "player" else "players"} needed before a lineup can be generated.", Modifier.fillMaxWidth().padding(Space.Normal)) }
         } else if (!hasLineup) {
             Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.large) { Column(Modifier.fillMaxWidth().padding(Space.Normal), verticalArrangement = Arrangement.spacedBy(Space.Small)) {
                 Text("Lineup not generated yet", style = MaterialTheme.typography.titleMedium)

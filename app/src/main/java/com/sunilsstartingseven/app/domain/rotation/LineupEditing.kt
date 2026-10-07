@@ -6,9 +6,10 @@ import com.sunilsstartingseven.app.domain.model.PositionFamily
 
 /** Validates the invariants required to store a complete manual roster. */
 class StructuralRosterValidator {
-    fun validate(assignments: List<RotationAssignment>, availablePlayerIds: Set<Long>, awayPlayerIds: Set<Long>): RosterValidation {
+    fun validate(assignments: List<RotationAssignment>, availablePlayerIds: Set<Long>, awayPlayerIds: Set<Long>, fieldPositions: List<PlayingPosition> = FieldPositions): RosterValidation {
         val errors = mutableListOf<String>()
-        if (availablePlayerIds.size < FieldPositions.size) errors += "At least seven available players are required."
+        if (fieldPositions.isEmpty() || fieldPositions.map { it.name }.distinct().size != fieldPositions.size) errors += "Choose at least one unique field position."
+        if (availablePlayerIds.size < fieldPositions.size) errors += "Not enough playing players for this layout."
         if (assignments.any { it.rotationIndex !in 0 until ROTATION_COUNT }) errors += "The roster contains an unknown rotation."
         if (assignments.any { it.playerId in awayPlayerIds }) errors += "Away players cannot receive assignments."
         for (rotation in 0 until ROTATION_COUNT) {
@@ -19,9 +20,9 @@ class StructuralRosterValidator {
             }
             val field = rows.filter { it.playingState == PlayingState.ON_FIELD }
             val bench = rows.filter { it.playingState == PlayingState.BENCH }
-            if (field.size != FieldPositions.size) errors += "Rotation ${rotation + 1} must have seven players on the field."
-            if (bench.size != availablePlayerIds.size - FieldPositions.size) errors += "Rotation ${rotation + 1} has the wrong bench count."
-            if (field.any { it.position == null } || bench.any { it.position != null } || field.mapNotNull { it.position }.toSet() != FieldPositions.toSet()) {
+            if (field.size != fieldPositions.size) errors += "Rotation ${rotation + 1} has the wrong field count."
+            if (bench.size != availablePlayerIds.size - fieldPositions.size) errors += "Rotation ${rotation + 1} has the wrong bench count."
+            if (field.any { it.position == null } || bench.any { it.position != null } || field.mapNotNull { it.position }.toSet() != fieldPositions.toSet()) {
                 errors += "Rotation ${rotation + 1} must fill every position exactly once."
             }
         }
@@ -43,7 +44,7 @@ object ManualLineupAssessment {
             val name = names[id] ?: "This player"
             rows.sortedBy { it.rotationIndex }.zipWithNext().forEach { (first, second) ->
                 when {
-                    first.position == PlayingPosition.GOALKEEPER && second.playingState == PlayingState.BENCH ->
+                    first.position?.family == PositionFamily.GK && second.playingState == PlayingState.BENCH ->
                         notes += FairnessNote("$name goes directly from Goalkeeper to Bench.")
                     first.playingState == PlayingState.BENCH && second.playingState == PlayingState.BENCH ->
                         notes += FairnessNote("$name is on the bench in consecutive rotations.")

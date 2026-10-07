@@ -50,6 +50,7 @@ private sealed class PhotoTarget {
 fun AppNavigation(viewModel: TeamViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val nav = rememberNavController()
+    val backDispatcher = androidx.activity.compose.LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
     val context = LocalContext.current
     val entry by nav.currentBackStackEntryAsState()
     val route = entry?.destination?.route ?: "home"
@@ -124,7 +125,7 @@ fun AppNavigation(viewModel: TeamViewModel) {
             TopAppBar(title = { Text(screenTitle(route, topLevel), style = MaterialTheme.typography.titleMedium) },
                 navigationIcon = {
                     if (topLevel) Image(painterResource(R.drawable.logo), null, Modifier.padding(start = Space.Normal, end = Space.Small).size(36.dp))
-                    else IconButton({ if (!state.saving) { viewModel.clearError(); nav.popBackStack() } }, enabled = !state.saving) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
+                    else IconButton({ if (!state.saving) { viewModel.clearError(); if (route.endsWith("/layout")) backDispatcher?.onBackPressed() else nav.popBackStack() } }, enabled = !state.saving) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "Back") }
                 },
                 actions = { if (route == "home") IconButton({ nav.navigate("settings") }, enabled = !state.saving) { Icon(Icons.Outlined.Settings, "Settings") } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background))
@@ -142,31 +143,53 @@ fun AppNavigation(viewModel: TeamViewModel) {
                 state.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                 state.loadFailed -> Column(Modifier.align(Alignment.Center).padding(Space.Large), verticalArrangement = Arrangement.spacedBy(Space.Normal)) { Text(state.error ?: "Couldn't load your team."); Button(viewModel::retryLoad) { Text("Retry") } }
                 else -> NavHost(nav, startDestination = "home") {
-                    composable("home") { HomeScreen(state, { navigateTop("team") }, { nav.navigate("game/new") }, { nav.navigate("game/${it.id}") }) }
+                    composable("home") { Column {
+                        SeasonSelector(state.seasons, state.selectedSeasonId, !state.saving, viewModel::selectSeason, { nav.navigate("seasons") })
+                        Box(Modifier.weight(1f)) { HomeScreen(state, { navigateTop("team") }, { nav.navigate("game/new") }, { nav.navigate("game/${it.id}") }) }
+                    } }
                     composable("team") { TeamScreen(state.players, state.saving, { nav.navigate("player/new") }, { nav.navigate("player/${it.id}/history") }, { nav.navigate("player/${it.id}/edit") }, viewModel::setActive) { photoTarget = PhotoTarget.Player(it.id) } }
-                    composable("games") { GamesScreen(state.games, state.games.associate { it.id to state.attendanceSummary(it.id) }, { nav.navigate("game/new") }) { nav.navigate("game/${it.id}") } }
-                    composable("fairness") { FairnessScreen(state.fairness) { nav.navigate("player/$it/history") } }
+                    composable("games") {
+                        Column { SeasonSelector(state.seasons, state.selectedSeasonId, !state.saving, viewModel::selectSeason, { nav.navigate("seasons") })
+                            Box(Modifier.weight(1f)) { GamesScreen(state.visibleGames, state.games.associate { it.id to state.attendanceSummary(it.id) }, { nav.navigate("game/new") }, seasonNames = state.seasons.associate { it.id to it.name }) { nav.navigate("game/${it.id}") } }
+                        }
+                    }
+                    composable("seasons") { SeasonsScreen(state.seasons, state.games.groupingBy { it.seasonId }.eachCount(), state.saving, viewModel::saveSeason) { id -> viewModel.selectSeason(id); nav.popBackStack(); navigateTop("games") } }
+                    composable("fairness") { Column {
+                        SeasonSelector(state.seasons, state.selectedSeasonId, !state.saving, viewModel::selectSeason, { nav.navigate("seasons") })
+                        Box(Modifier.weight(1f)) { FairnessScreen(state.fairness) { nav.navigate("player/$it/history") } }
+                    } }
                     composable("settings") { SettingsScreen(state, { createBackupLauncher.launch(viewModel.backupFileName()) }, { restoreBackupLauncher.launch(arrayOf("application/octet-stream", "application/zip", "application/json", "text/*")) }, { viewModel.restoreBackup { nav.popBackStack("home", inclusive = false) } }, viewModel::clearRestorePreview) }
-                    composable("player/new") { PlayerForm(false, "", "", state.saving, state.error, { first, last -> viewModel.savePlayer(null, first, last) { nav.popBackStack() } }, { viewModel.clearError(); nav.popBackStack() }) }
+                    composable("player/new") { PlayerForm(false, "", "", state.saving, state.error, { first, last, carry -> viewModel.savePlayer(null, first, last, carry) { nav.popBackStack() } }, { viewModel.clearError(); nav.popBackStack() }) }
                     composable("player/{id}/edit", arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStack ->
                         val id = backStack.arguments?.getLong("id") ?: 0L
                         val player = state.players.find { it.id == id }
-                        PlayerForm(true, player?.firstName.orEmpty(), player?.lastInitial.orEmpty(), state.saving, state.error, { first, last -> viewModel.savePlayer(id, first, last) { nav.popBackStack() } }, { viewModel.clearError(); nav.popBackStack() }, player) { photoTarget = PhotoTarget.Player(id) }
+                        PlayerForm(true, player?.firstName.orEmpty(), player?.lastInitial.orEmpty(), state.saving, state.error, { first, last, carry -> viewModel.savePlayer(id, first, last, carry) { nav.popBackStack() } }, { viewModel.clearError(); nav.popBackStack() }, player) { photoTarget = PhotoTarget.Player(id) }
                     }
                     composable("player/{id}/history", arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStack ->
                         val id = backStack.arguments?.getLong("id") ?: 0L
-                        PlayerHistoryScreen(state.fairness.player(id)) { gameId -> nav.navigate("game/$gameId/lineup") }
+                        Column {
+                            SeasonSelector(state.seasons, state.selectedSeasonId, !state.saving, viewModel::selectSeason, { nav.navigate("seasons") })
+                            Box(Modifier.weight(1f)) { PlayerHistoryScreen(state.fairness.player(id)) { gameId -> nav.navigate("game/$gameId/lineup") } }
+                        }
                     }
-                    composable("game/new") { GameForm(state.saving, state.error, onSave = { round, date, notes -> viewModel.createGame(round, date, notes) { nav.popBackStack(); navigateTop("games") } }, onCancel = { viewModel.clearError(); nav.popBackStack() }) }
+                    composable("game/new") { Column {
+                        SeasonSelector(state.seasons, state.selectedSeasonId ?: state.seasons.firstOrNull()?.id, !state.saving, viewModel::selectSeason, { nav.navigate("seasons") }, allSeasons = false)
+                        Box(Modifier.weight(1f)) { GameForm(state.saving, state.error, onSave = { round, date, notes -> viewModel.createGame(round, date, notes) { nav.popBackStack(); navigateTop("games") } }, onCancel = { viewModel.clearError(); nav.popBackStack() }) }
+                    } }
                     composable("game/{id}", arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStack ->
                         val id = backStack.arguments?.getLong("id") ?: 0L
                         val game = state.game(id)
-                        if (game == null) MissingGame() else GameDetailScreen(game, state.attendanceFor(id), state.missingActivePlayersFor(id), state.saving, { viewModel.initializeAttendance(id) }, { playerId, status -> viewModel.setAttendance(id, playerId, status) }, { viewModel.addMissingActivePlayers(id) }, { nav.navigate("game/$id/edit") }, { nav.navigate("game/$id/lineup") }, { photoTarget = PhotoTarget.Game(id) }, { nav.navigate("photo/game/$id") })
+                        if (game == null) MissingGame() else GameDetailScreen(game, state.attendanceFor(id), state.missingActivePlayersFor(id), state.saving, { viewModel.initializeAttendance(id) }, { playerId, status -> viewModel.setAttendance(id, playerId, status) }, { viewModel.addMissingActivePlayers(id) }, { nav.navigate("game/$id/edit") }, { nav.navigate("game/$id/lineup") }, { photoTarget = PhotoTarget.Game(id) }, { nav.navigate("photo/game/$id") }, { nav.navigate("game/$id/layout") }, state.seasons.find { it.id == game.seasonId }?.name.orEmpty())
                     }
                     composable("game/{id}/edit", arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStack ->
                         val id = backStack.arguments?.getLong("id") ?: 0L
                         val game = state.game(id)
                         if (game == null) MissingGame() else GameForm(state.saving, state.error, game.roundNumber, game.gameDate, game.notes, "Edit game", { round, date, notes -> viewModel.updateGame(id, round, date, notes) { nav.popBackStack() } }, { viewModel.clearError(); nav.popBackStack() })
+                    }
+                    composable("game/{id}/layout", arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStack ->
+                        val id = backStack.arguments?.getLong("id") ?: 0L
+                        val game = state.game(id)
+                        if (game == null) MissingGame() else PitchLayoutScreen(game, state.attendanceSummary(id).available, state.saving, { positions, options, onSuccess -> viewModel.updateLayout(id, positions, options, onSuccess) }, { nav.popBackStack() })
                     }
                     composable("game/{id}/lineup", arguments = listOf(navArgument("id") { type = NavType.LongType })) { backStack ->
                         val id = backStack.arguments?.getLong("id") ?: 0L
@@ -225,6 +248,8 @@ private fun screenTitle(route: String, topLevel: Boolean): String = when {
     topLevel -> "Sunil’s Starting Seven"
     route == "game/new" -> "New game"
     route == "player/new" -> "New player"
+    route == "seasons" -> "Seasons"
+    route.endsWith("/layout") -> "Pitch layout"
     route == "settings" -> "Settings"
     route.startsWith("photo/") -> "Photo"
     route.contains("/history") -> "Player history"

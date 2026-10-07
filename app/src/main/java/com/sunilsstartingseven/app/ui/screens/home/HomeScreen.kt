@@ -21,9 +21,10 @@ import com.sunilsstartingseven.app.viewmodel.TeamState
 
 @Composable
 fun HomeScreen(state: TeamState, onTeam: () -> Unit, onCreateGame: () -> Unit, onOpenGame: (Game) -> Unit) {
-    val currentDraft = state.games.filter { it.status == GameStatus.DRAFT }.maxWithOrNull(compareBy({ it.gameDate }, { it.roundNumber }, { it.id }))
+    val games = state.visibleGames
+    val currentDraft = games.filter { it.status == GameStatus.DRAFT }.maxWithOrNull(compareBy({ it.gameDate }, { it.roundNumber }, { it.id }))
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Space.Large), verticalArrangement = Arrangement.spacedBy(Space.Large)) {
-        if (state.games.isEmpty()) {
+        if (games.isEmpty()) {
             Image(painterResource(R.drawable.logo_with_text), "Sunil’s Starting Seven. Play, rotate, grow.", Modifier.size(176.dp).align(Alignment.CenterHorizontally))
         }
         Column(verticalArrangement = Arrangement.spacedBy(Space.Small)) {
@@ -44,11 +45,11 @@ fun HomeScreen(state: TeamState, onTeam: () -> Unit, onCreateGame: () -> Unit, o
         }
         Column(verticalArrangement = Arrangement.spacedBy(Space.Medium)) {
             Text("Game day starts here", style = MaterialTheme.typography.titleLarge)
-            if (state.games.isEmpty()) Text("No games yet. Save a draft with your round and date.", style = MaterialTheme.typography.bodyMedium)
+            if (games.isEmpty()) Text("No games yet. Save a draft with your round and date.", style = MaterialTheme.typography.bodyMedium)
             else if (currentDraft != null) {
-                GameCard(currentDraft, state.attendanceSummary(currentDraft.id)) { onOpenGame(currentDraft) }
+                GameCard(currentDraft, state.attendanceSummary(currentDraft.id), seasonName = state.seasons.find { it.id == currentDraft.seasonId }?.name) { onOpenGame(currentDraft) }
                 PrimaryAction("Continue Setup", { onOpenGame(currentDraft) }, Modifier.fillMaxWidth())
-            } else GameCard(state.games.first(), state.attendanceSummary(state.games.first().id)) { onOpenGame(state.games.first()) }
+            } else GameCard(games.first(), state.attendanceSummary(games.first().id), seasonName = state.seasons.find { it.id == games.first().seasonId }?.name) { onOpenGame(games.first()) }
             if (currentDraft == null) PrimaryAction("Create Game", onCreateGame, Modifier.fillMaxWidth())
         }
         SoccerPitch(Modifier.fillMaxWidth())

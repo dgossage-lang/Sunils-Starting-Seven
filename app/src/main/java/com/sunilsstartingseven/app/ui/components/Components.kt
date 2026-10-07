@@ -93,7 +93,7 @@ fun AttendanceSummaryRow(summary: AttendanceSummary, modifier: Modifier = Modifi
     Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(Space.Small)) {
         SummaryPill("${summary.available}", "Playing", Modifier.weight(1f), MaterialTheme.colorScheme.primaryContainer)
         SummaryPill("${summary.away}", "Away", Modifier.weight(1f), MaterialTheme.colorScheme.secondaryContainer)
-        SummaryPill("7", "On field", Modifier.weight(1f), MaterialTheme.colorScheme.surfaceContainerHigh)
+        SummaryPill("${summary.onFieldCapacity}", "On field", Modifier.weight(1f), MaterialTheme.colorScheme.surfaceContainerHigh)
         SummaryPill("${summary.expectedBench}", "Bench", Modifier.weight(1f), MaterialTheme.colorScheme.tertiaryContainer)
     }
 }
@@ -125,7 +125,7 @@ fun RotationSelector(selected: Int, onSelected: (Int) -> Unit, modifier: Modifie
 
 @Composable
 fun SoccerPitch(modifier: Modifier = Modifier) {
-    Canvas(modifier.aspectRatio(PitchAspectRatio).clip(RoundedCornerShape(24.dp)).semantics { contentDescription = "Portrait seven-a-side soccer pitch with goals at the top and bottom" }) {
+    Canvas(modifier.aspectRatio(PitchAspectRatio).clip(RoundedCornerShape(24.dp)).semantics { contentDescription = "Portrait soccer pitch with goals at the top and bottom" }) {
         drawRect(Brand.Primary)
         for (stripe in 0..5 step 2) drawRect(Brand.Green, Offset(0f, size.height * stripe / 6), Size(size.width, size.height / 6))
         val inset = size.minDimension * .08f
@@ -291,7 +291,8 @@ fun PitchLineup(
     playersByPosition: Map<PlayingPosition, Player>,
     modifier: Modifier = Modifier,
     selectedPlayerId: Long? = null,
-    onPlayerClick: ((Long) -> Unit)? = null
+    onPlayerClick: ((Long) -> Unit)? = null,
+    fieldPositions: List<PlayingPosition> = PlayingPosition.entries.toList()
 ) {
     BoxWithConstraints(modifier.aspectRatio(PitchAspectRatio)) {
         SoccerPitch(Modifier.fillMaxSize())
@@ -299,7 +300,7 @@ fun PitchLineup(
         val pitchHeight = maxHeight
         val cardWidth = minOf(84.dp, maxOf(78.dp, pitchWidth * .245f))
         val cardHeight = minOf(72.dp, maxOf(66.dp, cardWidth * .84f))
-        PlayingPosition.entries.forEach { position ->
+        fieldPositions.forEach { position ->
             val visualY = if (position == PlayingPosition.GOALKEEPER) position.y + .025f else position.y
             PitchPlayerCard(
                 player = playersByPosition[position],

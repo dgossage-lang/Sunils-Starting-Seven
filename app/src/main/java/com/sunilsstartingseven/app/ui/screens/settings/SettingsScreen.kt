@@ -1,6 +1,8 @@
 package com.sunilsstartingseven.app.ui.screens.settings
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -21,7 +23,7 @@ fun SettingsScreen(
     onCancelRestore: () -> Unit
 ) {
     var confirmRestore by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().padding(Space.Large), verticalArrangement = Arrangement.spacedBy(Space.Large)) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(Space.Large), verticalArrangement = Arrangement.spacedBy(Space.Large)) {
         Column(verticalArrangement = Arrangement.spacedBy(Space.Small)) {
             Text("Settings", style = MaterialTheme.typography.headlineLarge)
             Text("App version ${BuildConfig.VERSION_NAME}", color = MaterialTheme.colorScheme.onSurfaceVariant)

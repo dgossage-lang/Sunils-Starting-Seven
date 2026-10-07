@@ -22,7 +22,8 @@ data class RotationRequest(
     val availablePlayers: List<RotationPlayer>,
     val awayPlayerIds: Set<Long> = emptySet(),
     val history: List<HistoricalAssignment> = emptyList(),
-    val seed: Int = 0
+    val seed: Int = 0,
+    val fieldPositions: List<PlayingPosition> = FieldPositions
 )
 data class RotationResult(val assignments: List<RotationAssignment>, val diagnostics: List<String> = emptyList())
 
@@ -43,10 +44,12 @@ private data class PlayerStats(
 }
 
 class RotationValidator {
-    fun validate(assignments: List<RotationAssignment>, availablePlayerIds: Set<Long>, awayPlayerIds: Set<Long>): RosterValidation {
+    fun validate(assignments: List<RotationAssignment>, availablePlayerIds: Set<Long>, awayPlayerIds: Set<Long>, fieldPositions: List<PlayingPosition> = FieldPositions): RosterValidation {
         val errors = mutableListOf<String>()
         val warnings = mutableListOf<String>()
-        if (availablePlayerIds.size < 7) errors += "At least seven available players are required."
+        if (fieldPositions.isEmpty() || fieldPositions.map { it.name }.distinct().size != fieldPositions.size) errors += "Choose at least one unique field position."
+        if (availablePlayerIds.size < fieldPositions.size) errors += "Not enough playing players for this layout."
+        if (assignments.any { it.rotationIndex !in 0 until ROTATION_COUNT }) errors += "Unknown rotation."
         if (assignments.any { it.playerId in awayPlayerIds }) errors += "Away players cannot receive assignments."
         val expectedPerRotation = availablePlayerIds.size
         for (rotation in 0 until ROTATION_COUNT) {
@@ -57,18 +60,18 @@ class RotationValidator {
             if (ids.toSet() != availablePlayerIds) errors += "Rotation ${rotation + 1} does not represent every available player exactly once."
             val onField = rows.filter { it.playingState == PlayingState.ON_FIELD }
             val bench = rows.filter { it.playingState == PlayingState.BENCH }
-            if (onField.size != FieldPositions.size) errors += "Rotation ${rotation + 1} has ${onField.size} on-field players."
-            if (bench.size != availablePlayerIds.size - FieldPositions.size) errors += "Rotation ${rotation + 1} has ${bench.size} bench players."
+            if (onField.size != fieldPositions.size) errors += "Rotation ${rotation + 1} has ${onField.size} on-field players."
+            if (bench.size != availablePlayerIds.size - fieldPositions.size) errors += "Rotation ${rotation + 1} has ${bench.size} bench players."
             val positions = onField.mapNotNull { it.position }
-            if (positions.toSet() != FieldPositions.toSet()) errors += "Rotation ${rotation + 1} does not fill each exact position once."
+            if (positions.toSet() != fieldPositions.toSet()) errors += "Rotation ${rotation + 1} does not fill each exact position once."
             if (onField.any { it.position == null }) errors += "Rotation ${rotation + 1} has an on-field row without a position."
             if (bench.any { it.position != null }) errors += "Rotation ${rotation + 1} has a bench row with a position."
         }
         val byPlayer = assignments.groupBy { it.playerId }
         byPlayer.forEach { (playerId, rows) ->
             rows.sortedBy { it.rotationIndex }.zipWithNext().forEach { (a, b) ->
-                if (a.position == PlayingPosition.GOALKEEPER && b.playingState == PlayingState.BENCH) errors += "Player $playerId moves directly from goalkeeper to bench."
-                if (a.playingState == PlayingState.BENCH && b.playingState == PlayingState.BENCH && availablePlayerIds.size == 10) errors += "Player $playerId has consecutive bench periods."
+                if (a.position?.family == PositionFamily.GK && b.playingState == PlayingState.BENCH) errors += "Player $playerId moves directly from goalkeeper to bench."
+                if (a.playingState == PlayingState.BENCH && b.playingState == PlayingState.BENCH && fieldPositions.size == 7 && availablePlayerIds.size == 10) errors += "Player $playerId has consecutive bench periods."
                 if (a.position?.family == PositionFamily.DEF && b.position?.family == PositionFamily.DEF) warnings += "Player $playerId has consecutive DEF family assignments."
                 if (a.position?.family == PositionFamily.WING && b.position?.family == PositionFamily.WING) warnings += "Player $playerId has consecutive WING family assignments."
             }
@@ -79,11 +82,14 @@ class RotationValidator {
 
 class FairRotationEngine(private val validator: RotationValidator = RotationValidator()) {
     fun generate(request: RotationRequest): RotationResult {
+        val positions = request.fieldPositions
+        validateLayout(positions)
+        require(request.availablePlayers.size <= 20) { "Up to 20 playing players are supported." }
         val players = request.availablePlayers.distinctBy { it.id }.sortedBy { seededOrder(it.id, request.seed) }
-        require(players.size >= FieldPositions.size) { "At least seven available players are required." }
+        require(players.size >= positions.size) { "Not enough playing players for this layout." }
         val availableIds = players.map { it.id }.toSet()
         require(request.awayPlayerIds.none { it in availableIds }) { "Away players cannot be available." }
-        val history = buildStats(request.history)
+        val history = buildStats(request.history, positions)
         val assignments = mutableListOf<RotationAssignment>()
         val inGameExact = players.associate { it.id to mutableMapOf<PlayingPosition, Int>() }
         val inGameFamily = players.associate { it.id to mutableMapOf<PositionFamily, Int>() }
@@ -93,9 +99,9 @@ class FairRotationEngine(private val validator: RotationValidator = RotationVali
         val diagnostics = mutableListOf<String>()
 
         for (rotation in 0 until ROTATION_COUNT) {
-            val benchIds = chooseBench(players, rotation, request.seed, history, inGameBench, previousPosition, previousBench)
+            val benchIds = chooseBench(players, rotation, request.seed, history, inGameBench, previousPosition, previousBench, positions.size)
             val active = players.filter { it.id !in benchIds }
-            val placed = choosePositions(active, rotation, request.seed, history, inGameExact, inGameFamily, previousPosition)
+            val placed = choosePositions(active, rotation, request.seed, history, inGameExact, inGameFamily, previousPosition, positions)
             placed.forEach { (position, player) ->
                 assignments += RotationAssignment(player.id, rotation, PlayingState.ON_FIELD, position)
                 inGameExact[player.id]!![position] = (inGameExact[player.id]!![position] ?: 0) + 1
@@ -108,7 +114,7 @@ class FairRotationEngine(private val validator: RotationValidator = RotationVali
             previousBench.clear(); previousBench.addAll(benchIds)
             players.forEach { player -> previousPosition[player.id] = placed.entries.firstOrNull { it.value.id == player.id }?.key }
         }
-        val validation = validator.validate(assignments, availableIds, request.awayPlayerIds)
+        val validation = validator.validate(assignments, availableIds, request.awayPlayerIds, positions)
         if (!validation.valid) error(validation.errors.joinToString("; "))
         diagnostics += validation.warnings
         return RotationResult(assignments.sortedWith(compareBy({ it.rotationIndex }, { it.position?.ordinal ?: 99 }, { it.playerId })), diagnostics)
@@ -121,15 +127,16 @@ class FairRotationEngine(private val validator: RotationValidator = RotationVali
         history: Map<Long, PlayerStats>,
         inGameBench: Map<Long, Int>,
         previousPosition: Map<Long, PlayingPosition?>,
-        previousBench: Set<Long>
+        previousBench: Set<Long>,
+        fieldCount: Int
     ): Set<Long> {
-        val benchCount = players.size - FieldPositions.size
+        val benchCount = players.size - fieldCount
         if (benchCount <= 0) return emptySet()
         val combos = combinations(players.map { it.id }, benchCount)
         val feasible = combos.filter { combo ->
-            combo.none { previousPosition[it] == PlayingPosition.GOALKEEPER } &&
-                (players.size != 10 || combo.none { it in previousBench })
-        }.ifEmpty { combos.filter { combo -> combo.none { previousPosition[it] == PlayingPosition.GOALKEEPER } } }.ifEmpty { combos }
+            combo.none { previousPosition[it]?.family == PositionFamily.GK } &&
+                (fieldCount != 7 || players.size != 10 || combo.none { it in previousBench })
+        }.ifEmpty { combos.filter { combo -> combo.none { previousPosition[it]?.family == PositionFamily.GK } } }.ifEmpty { combos }
         return feasible.minWith(compareBy<Set<Long>> { combo ->
             combo.sumOf { playerId -> benchScore(playerId, history[playerId] ?: PlayerStats(), inGameBench[playerId] ?: 0) } + benchSpreadPenalty(players.map { it.id }, combo, inGameBench)
         }.thenBy { combo -> combo.sumOf { seededOrder(it, seed + rotation * 131) } }).toSet()
@@ -153,14 +160,41 @@ class FairRotationEngine(private val validator: RotationValidator = RotationVali
         history: Map<Long, PlayerStats>,
         inGameExact: Map<Long, Map<PlayingPosition, Int>>,
         inGameFamily: Map<Long, Map<PositionFamily, Int>>,
-        previousPosition: Map<Long, PlayingPosition?>
+        previousPosition: Map<Long, PlayingPosition?>,
+        positions: List<PlayingPosition>
     ): Map<PlayingPosition, RotationPlayer> {
+        if (positions.size > 7) {
+            val size = 1 shl players.size
+            val costs = IntArray(size) { Int.MAX_VALUE }
+            val chosen = IntArray(size) { -1 }
+            costs[0] = 0
+            for (mask in 0 until size) {
+                if (costs[mask] == Int.MAX_VALUE) continue
+                val index = Integer.bitCount(mask)
+                if (index >= positions.size) continue
+                players.forEachIndexed { playerIndex, player ->
+                    if (mask and (1 shl playerIndex) == 0) {
+                        val next = mask or (1 shl playerIndex)
+                        val score = costs[mask] + positionScore(player.id, positions[index], rotation, seed, history[player.id] ?: PlayerStats(), inGameExact[player.id].orEmpty(), inGameFamily[player.id].orEmpty(), previousPosition[player.id])
+                        if (score < costs[next]) { costs[next] = score; chosen[next] = playerIndex }
+                    }
+                }
+            }
+            var mask = size - 1
+            val result = mutableMapOf<PlayingPosition, RotationPlayer>()
+            for (index in positions.indices.reversed()) {
+                val playerIndex = chosen[mask]
+                result[positions[index]] = players[playerIndex]
+                mask = mask xor (1 shl playerIndex)
+            }
+            return result
+        }
         var bestScore = Int.MAX_VALUE
         var best = emptyMap<PlayingPosition, RotationPlayer>()
         permutations(players).forEach { permutation ->
             var score = 0
             val map = mutableMapOf<PlayingPosition, RotationPlayer>()
-            FieldPositions.forEachIndexed { index, position ->
+            positions.forEachIndexed { index, position ->
                 val player = permutation[index]
                 map[position] = player
                 score += positionScore(player.id, position, rotation, seed, history[player.id] ?: PlayerStats(), inGameExact[player.id].orEmpty(), inGameFamily[player.id].orEmpty(), previousPosition[player.id])
@@ -195,9 +229,9 @@ class FairRotationEngine(private val validator: RotationValidator = RotationVali
         return score
     }
 
-    private fun buildStats(history: List<HistoricalAssignment>): Map<Long, PlayerStats> {
+    private fun buildStats(history: List<HistoricalAssignment>, positions: List<PlayingPosition>): Map<Long, PlayerStats> {
         return history.groupBy { it.playerId }.mapValues { (_, rows) ->
-            val exact = rows.mapNotNull { it.position }.groupingBy { it }.eachCount()
+            val exact = rows.mapNotNull { row -> positions.find { it.name == row.position?.name } }.groupingBy { it }.eachCount()
             val family = rows.mapNotNull { it.position?.family }.groupingBy { it }.eachCount()
             PlayerStats(
                 active = rows.count { it.playingState == PlayingState.ON_FIELD },

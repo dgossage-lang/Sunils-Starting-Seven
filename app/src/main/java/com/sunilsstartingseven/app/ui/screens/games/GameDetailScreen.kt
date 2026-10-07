@@ -41,16 +41,19 @@ fun GameDetailScreen(
     onEdit: () -> Unit,
     onLineup: () -> Unit,
     onGamePhoto: () -> Unit,
-    onViewPhoto: () -> Unit
+    onViewPhoto: () -> Unit,
+    onLayout: () -> Unit = {},
+    seasonName: String = ""
 ) {
     LaunchedEffect(game.id) { onInitialize() }
-    val summary = attendanceSummary(attendance.map { it.attendance.status })
+    val summary = attendanceSummary(attendance.map { it.attendance.status }, game.fieldPositions.size)
     val editableAttendance = game.status != GameStatus.PLAYED
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(Space.Large), verticalArrangement = Arrangement.spacedBy(Space.Normal)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(Space.Small)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column {
+                        if (seasonName.isNotBlank()) Text(seasonName, style = MaterialTheme.typography.labelLarge)
                         Text("Round ${game.roundNumber}", style = MaterialTheme.typography.headlineLarge)
                         Text(game.gameDate.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)), color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -66,11 +69,12 @@ fun GameDetailScreen(
             }
         }
         item { GameDayPhotoCard(game, busy, onGamePhoto, onViewPhoto) }
+        item { OutlinedButton(onLayout, Modifier.fillMaxWidth(), enabled = !busy) { Text("Pitch Layout · ${game.fieldPositions.size} positions") } }
         item { AttendanceSummaryRow(summary) }
-        if (summary.neededForFullSeven > 0) {
+        if (summary.neededForLayout > 0) {
             item {
                 Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.medium) {
-                    Text("${summary.neededForFullSeven} more ${if (summary.neededForFullSeven == 1) "player" else "players"} needed for a full Starting Seven.", Modifier.padding(Space.Normal), style = MaterialTheme.typography.bodyMedium)
+                    Text("${summary.neededForLayout} more ${if (summary.neededForLayout == 1) "player" else "players"} needed for this ${game.fieldPositions.size}-player layout.", Modifier.padding(Space.Normal), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }

@@ -16,12 +16,22 @@ data class Player(
     val lastInitial: String,
     val isActive: Boolean = true,
     val createdAt: Long = System.currentTimeMillis(),
-    val photoPath: String? = null
+    val photoPath: String? = null,
+    @androidx.room.ColumnInfo(defaultValue = "0") val carryFairnessAcrossSeasons: Boolean = false
 ) {
     val displayName: String get() = if (lastInitial.isBlank()) firstName else "$firstName $lastInitial."
 }
 
-@Entity(tableName = "games", indices = [Index("gameDate")])
+@Entity(tableName = "seasons")
+data class Season(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "games", indices = [Index("gameDate"), Index("seasonId")], foreignKeys = [
+    ForeignKey(entity = Season::class, parentColumns = ["id"], childColumns = ["seasonId"], onDelete = ForeignKey.RESTRICT)
+])
 data class Game(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val roundNumber: Int,
@@ -29,7 +39,12 @@ data class Game(
     val status: GameStatus = GameStatus.DRAFT,
     val notes: String = "",
     val createdAt: Long = System.currentTimeMillis(),
-    val photoPath: String? = null
+    val photoPath: String? = null,
+    val seasonId: Long? = null,
+    @androidx.room.ColumnInfo(defaultValue = "'STRIKER,LEFT_WING,MID,RIGHT_WING,DEFENDER_1,DEFENDER_2,GOALKEEPER'")
+    val fieldPositions: List<PlayingPosition> = PlayingPosition.entries.toList(),
+    @androidx.room.ColumnInfo(defaultValue = "'STRIKER,LEFT_WING,MID,RIGHT_WING,DEFENDER_1,DEFENDER_2,GOALKEEPER'")
+    val positionOptions: List<PlayingPosition> = PlayingPosition.entries.toList()
 )
 
 @Entity(

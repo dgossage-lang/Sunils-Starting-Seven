@@ -146,7 +146,7 @@ class BackupRepositoryTest {
         val repository = BackupRepository(db, preferences, media)
         val bytes = ByteArrayOutputStream().also { repository.writeBackupArchive(it) }.toByteArray()
         val validated = repository.validateBytes(bytes)
-        assertEquals(2, validated.preview.backupVersion)
+        assertEquals(3, validated.preview.backupVersion)
         assertEquals(1, validated.preview.playerPhotoCount)
         assertEquals(1, validated.preview.gamePhotoCount)
         media.clearAllMedia()

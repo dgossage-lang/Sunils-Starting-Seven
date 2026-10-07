@@ -426,3 +426,69 @@ MINOR:
 
 - Lint retains 25 advisory warnings listed above.
 - GitHub release asset upload was not performed in this local release flow.
+# v1.1.0-dev seasons and configurable layouts — 2026-10-07
+
+This section records development validation; the earlier v1.0.0 release records remain historical evidence for that release.
+
+- Build identity: `1.1.0-dev`, versionCode `11`; Room schema `3`; new backup exports use format `3`.
+- JVM/Robolectric regression suite: **73 tests passed, zero failures** (`./gradlew.bat test --console=plain`).
+- Lint: **zero errors, 25 warnings**, with the same categories as the v1.0 baseline: GradleDependency (13), NewerVersionAvailable (4), ComposableNaming (2), OldTargetApi (1), AndroidGradlePluginVersion (1), ObsoleteSdkInt (1), MonochromeLauncherIcon (1), IconLocation (1), UseKtx (1).
+- Debug APK and instrumentation APK builds: passed.
+- `connectedDebugAndroidTest`: **one Compose workflow passed** on a fresh disposable Android 15 / API 35 emulator, including season creation, the per-player fairness toggle, standard-position removal, custom-position creation and visual placement, attendance changes, generation, manual-edit entry, Played history and activity recreation.
+- Verified the requested example: nine playing players, six configured field slots and three bench assignments in each of four rotations.
+- Repository tests prove independent season fairness, per-player carry on/off, inherited layouts without copied assignments, preserved attendance after layout changes, immutable Played layouts and persistence after reopen.
+- Custom-position tests cover saved definitions, movement/rename snapshots, inheritance of removed positions as reusable options, and 8–12 on-field slot generation.
+- Upgrade tests prove Room 1→3 migration and migration from the tracked released v2 schema preserve player/game rows, media references, attendance and assignments; existing games become part of an Earlier games season with the original seven slots.
+- Backup tests cover v3 season/layout/preference/media round-trip, v1 JSON and v2 restore compatibility, and invalid season/layout rejection.
+- `git diff --check`: passed. Source work remains local on `main`; no new release has been published. Signing credentials and generated build/emulator files remain outside tracked source.
+
+Full behavior and compatibility details: [v1.1 development plan](RELEASE_2.0.0.md).
+
+Custom-position deletion and toggle polish follow-up (2026-10-07): 73 JVM tests passed; debug/test APK builds and lint passed; the explicitly emulator-targeted Compose workflow passed, including deleting a custom option and confirming it stays deleted after saving. Repository coverage verifies inactive deletion preserves a Ready lineup, active deletion clears assignments while preserving attendance, built-in positions cannot be deleted, future layout inheritance excludes deleted options, and backup restore preserves both deletions and earlier game history. A separately connected Samsung SM-G998B failed to launch a Compose hierarchy during the initial all-device attempt; physical-device UI validation remains incomplete. The repeat run used ANDROID_SERIAL=emulator-5580 and passed.
+
+Pitch styling and drag follow-up (2026-10-07): debug build and lint passed; the emulator-targeted Compose workflow passed with a real drag gesture, checking that the custom position moves right and up before release, then exercising turn-off, deletion, saved six-position generation and activity recreation. Inactive positions now render at 50% opacity using the earlier green/white styling. Testing explicitly targeted emulator-5580; the seeded Samsung installation was not modified by this follow-up.
+
+# Version 2.0.0 production release — 2026-10-07
+
+Release baseline: main at c8b969b86fdd21991fb82205d9b9df43d907cf7e, tracking origin/main with zero divergence before release preparation. All Version 2.0 feature changes were local on main and are included in the release commit. No other branch or worktree was created.
+
+## Build and signature
+
+- Version: 2.0.0, versionCode 20; application ID unchanged.
+- AGP 9.2.1, Gradle wrapper 9.6.0, Kotlin/Compose plugin 2.4.20, Room schema 3.
+- Clean build: `./gradlew.bat clean test lint assembleDebug assembleRelease --console=plain` passed.
+- A production smoke test discovered that the backup preview could hide confirmation buttons. Settings was made scrollable, then `test lint assembleDebug assembleRelease` passed again. Restore was exercised at normal emulator display density.
+- JVM/Robolectric tests: 73 passed, zero failures. Includes 7–12-player generation, shortages relative to selected layout, 17-round all-present and mixed-absence simulation, manual editing, Played history, seasons, custom positions, migrations, portraits, photos, v1/v2 compatibility and v3 media round-trip.
+- Emulator-only `connectedDebugAndroidTest` passed, including real custom-position drag/drop, deletion and saved lineup recreation. ANDROID_SERIAL explicitly selected emulator-5580.
+- `apksigner verify --verbose --print-certs` passed for the final distribution APK (v2 signature scheme; one signer).
+- Public production certificate SHA-256: bf319e56995bfb02213aba76417f184fb1e55a0403ef139180315887f14177c5. It matches the downloaded v1.0.0 release APK.
+- Debug certificate SHA-256: c0a8b09f312b19d4452026aaace2dc31d0cd17018336e06f8d61f802f531abcd. Production signing is distinct; the final APK is non-debuggable.
+- Signing properties/keystore remain external. No passwords, keystores, private keys, APK/AAB files, build outputs or user Gradle configuration belong in the source commit.
+
+## Distribution artifact
+
+- Filename: Sunils-Starting-Seven-v2.0.0.apk.
+- Local path: app/build/outputs/release-distribution/Sunils-Starting-Seven-v2.0.0.apk.
+- Size: 16,275,434 bytes (15.52 MiB / 16.28 MB); 81,924 bytes larger than v1.0.0.
+- SHA-256: ad28cd9e69093224bb7fd8ee1e02aaa3be30f699576f947a8ceed55d73ca8458.
+- The distribution copy is byte-identical to app/build/outputs/apk/release/app-release.apk.
+- Debug APK size: 23,804,247 bytes.
+- Final manifest requested permission: com.sunilsstartingseven.app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION only. INTERNET, CAMERA, READ/WRITE/MANAGE_EXTERNAL_STORAGE and READ_MEDIA permissions are absent.
+
+## Production smoke and persistence
+
+The published signed v1.0.0 APK was downloaded and its checksum verified against GitHub. On an isolated API 35 emulator, v1.0.0 restored a controlled v2 media archive with eight players, two games, attendance, 32 Played assignments, one portrait and one game photo.
+
+Installing signed v2.0.0 with `adb install -r` succeeded without uninstalling or clearing that installation. The eight-player roster, both games, Earlier games season, saved Played lineup, portrait, game-photo thumbnail and fairness history survived. This exercises the actual production signing and Room migration path, in addition to schema migration tests.
+
+The production v2 app exported a v3 archive. Its manifest was inspected: appVersion 2.0.0, backupVersion 3, schemaVersion 3, eight players, two games, 32 assignments, one season and two media files. Clearing only the disposable emulator's app data and restarting proved the production fresh-install state is empty, with no test seed. Restoring the exported v3 archive restored the roster, games, season and game photo. The scrollable preview confirmation was verified at normal density. The seeded Samsung debug installation was not modified by release validation.
+
+## Lint and remaining issues
+
+Zero lint errors; 25 advisory warnings: GradleDependency 13, NewerVersionAvailable 4, ComposableNaming 2, OldTargetApi 1, AndroidGradlePluginVersion 1, ObsoleteSdkInt 1, MonochromeLauncherIcon 1, IconLocation 1, UseKtx 1.
+
+- BLOCKER: none known after the backup-screen fix.
+- IMPORTANT: none known.
+- MINOR: existing lint advisories, Gradle deprecated-feature notices, and native-library symbol-stripping notices. Automated device coverage is API 35 emulator; broader physical-device compatibility has not been exhaustively tested.
+
+The v2.0.0 release uses a normal main push, then an annotated tag after origin/main contains the validated source commit. Binaries are distributed as GitHub release assets rather than committed source. The production key matches v1.0.0; debug installations require backup, uninstall, production install and restore when switching signatures.

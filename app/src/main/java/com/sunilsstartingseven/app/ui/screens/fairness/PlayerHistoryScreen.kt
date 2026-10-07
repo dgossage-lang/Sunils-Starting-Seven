@@ -103,7 +103,7 @@ private fun PositionDistributionCard(history: PlayerHistorySummary) {
     Card {
         Column(Modifier.fillMaxWidth().padding(Space.Normal), verticalArrangement = Arrangement.spacedBy(Space.Small)) {
             Text("Position Distribution", style = MaterialTheme.typography.titleMedium)
-            FieldPositions.forEach { position ->
+            history.eligiblePositions.forEach { position ->
                 CountBar(position.shortLabel, history.exactPositions[position] ?: 0, max, PositionColor(position.family))
             }
         }
@@ -116,7 +116,7 @@ private fun RoleGroupsCard(history: PlayerHistorySummary) {
     Card {
         Column(Modifier.fillMaxWidth().padding(Space.Normal), verticalArrangement = Arrangement.spacedBy(Space.Small)) {
             Text("Role Groups", style = MaterialTheme.typography.titleMedium)
-            PositionFamily.entries.forEach { family ->
+            history.eligibleFamilies.forEach { family ->
                 CountBar(family.label(), history.families[family] ?: 0, max, familyColor(family), labelMinWidth = 92.dp)
             }
         }
@@ -128,8 +128,8 @@ private fun RoleCoverageCard(history: PlayerHistorySummary) {
     Card {
         Column(Modifier.fillMaxWidth().padding(Space.Normal), verticalArrangement = Arrangement.spacedBy(Space.Tiny)) {
             Text("Roles experienced", style = MaterialTheme.typography.titleMedium)
-            Text("${history.distinctExactPositions} / ${FieldPositions.size} positions", style = MaterialTheme.typography.headlineSmall)
-            Text("${history.distinctFamilies} / ${PositionFamily.entries.size} role groups", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("${history.distinctExactPositions} / ${history.eligiblePositions.size} positions", style = MaterialTheme.typography.headlineSmall)
+            Text("${history.distinctFamilies} / ${history.eligibleFamilies.size} role groups", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -160,6 +160,7 @@ private fun GameHistoryCard(game: GameHistoryEntry, onGame: (Long) -> Unit) {
                 Text("Round ${game.roundNumber}", style = MaterialTheme.typography.titleMedium)
                 Text(game.gameDate.format(GameDateFormat), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            Text("${game.seasonName} · ${game.fieldCount} on field", style = MaterialTheme.typography.bodySmall)
             if (game.attendance == AttendanceStatus.AWAY) {
                 PositionChip("Away", MaterialTheme.colorScheme.surfaceContainerHigh)
             } else {

@@ -30,6 +30,8 @@ import java.time.format.DateTimeFormatter
 import java.time.LocalDate
 
 data class TeamState(
+    val seasons: List<Season> = emptyList(),
+    val selectedSeasonId: Long? = null,
     val players: List<Player> = emptyList(),
     val games: List<Game> = emptyList(),
     val attendance: Map<Long, List<AttendanceWithPlayer>> = emptyMap(),
@@ -42,10 +44,11 @@ data class TeamState(
     val restorePreview: ValidatedBackup? = null,
     val loadFailed: Boolean = false
 ) {
+    val visibleGames: List<Game> get() = games.filter { selectedSeasonId == null || it.seasonId == selectedSeasonId }
     fun game(id: Long): Game? = games.find { it.id == id }
     fun attendanceFor(gameId: Long): List<AttendanceWithPlayer> = attendance[gameId].orEmpty()
     fun assignmentsFor(gameId: Long): List<AssignmentWithPlayer> = assignments[gameId].orEmpty()
-    fun attendanceSummary(gameId: Long): AttendanceSummary = attendanceSummary(attendanceFor(gameId).map { it.attendance.status })
+    fun attendanceSummary(gameId: Long): AttendanceSummary = attendanceSummary(attendanceFor(gameId).map { it.attendance.status }, game(gameId)?.fieldPositions?.size ?: 7)
     fun missingActivePlayersFor(gameId: Long): List<Player> {
         val represented = attendanceFor(gameId).map { it.player.id }.toSet()
         return players.filter { it.isActive && it.id !in represented }
@@ -53,6 +56,7 @@ data class TeamState(
 }
 
 class TeamViewModel(private val container: AppContainer) : ViewModel() {
+    private val selectedSeason = MutableStateFlow<Long?>(null)
     private val mutableState = MutableStateFlow(TeamState())
     private val fairnessCalculator = FairnessHistoryCalculator()
     val state = mutableState.asStateFlow()
@@ -74,16 +78,21 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
                     games = games,
                     attendance = attendance.groupBy { it.attendance.gameId },
                     assignments = assignments.groupBy { it.assignment.gameId },
-                    fairness = fairnessCalculator.calculate(
-                        players = players.map { HistoryPlayer(it.id, it.displayName, it.isActive, it.photoPath) },
-                        games = games.map { HistoryGame(it.id, it.roundNumber, it.gameDate, it.status) },
-                        attendance = flatAttendance,
-                        assignments = flatAssignments
-                    ),
                     loading = false,
                     loadFailed = false
                 )
             }
+                .combine(container.seasons.seasons) { next, seasons -> next.copy(seasons = seasons) }
+                .combine(selectedSeason) { next, selected ->
+                    val validSelection = selected?.takeIf { id -> next.seasons.any { it.id == id } }
+                    val games = next.games.filter { validSelection == null || it.seasonId == validSelection }
+                    next.copy(selectedSeasonId = validSelection, fairness = fairnessCalculator.calculate(
+                        next.players.map { HistoryPlayer(it.id, it.displayName, it.isActive, it.photoPath) },
+                        games.map { game -> HistoryGame(game.id, game.roundNumber, game.gameDate, game.status, game.fieldPositions, next.seasons.find { it.id == game.seasonId }?.name ?: "Earlier games") },
+                        next.attendance.values.flatten().map { HistoryAttendance(it.attendance.gameId, it.attendance.playerId, it.attendance.status) },
+                        next.assignments.values.flatten().map { HistoryAssignment(it.assignment.gameId, it.assignment.rotationIndex, it.assignment.playerId, it.assignment.playingState, it.assignment.position) }
+                    ))
+                }
                 .catch { error ->
                     Log.e("StartingSeven", "Unable to read local team data", error)
                     mutableState.update { it.copy(loading = false, loadFailed = true, error = "Couldn't load your team. Please retry.") }
@@ -120,22 +129,31 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
         }
     }
 
-    fun savePlayer(id: Long?, first: String, initial: String, onSuccess: () -> Unit) {
+    fun savePlayer(id: Long?, first: String, initial: String, carryAcrossSeasons: Boolean = false, onSuccess: () -> Unit) {
         if (!PlayerInput.validate(first, initial).isValid) return
-        write(onSuccess) { container.players.save(id, first, initial) }
+        write(onSuccess) { container.players.save(id, first, initial, carryAcrossSeasons) }
     }
 
     fun setActive(player: Player, active: Boolean) = write { container.players.setActive(player.id, active) }
 
     fun createGame(round: Int, date: LocalDate, notes: String, onSuccess: () -> Unit) {
         if (round <= 0) return
-        write(onSuccess) { container.games.createDraft(round, date, notes) }
+        write(onSuccess) { container.games.createDraft(round, date, notes, state.value.selectedSeasonId) }
     }
 
     fun updateGame(gameId: Long, round: Int, date: LocalDate, notes: String, onSuccess: () -> Unit) {
         if (round <= 0) return
         write(onSuccess) { container.games.updateDraft(gameId, round, date, notes) }
     }
+
+    fun selectSeason(id: Long?) { selectedSeason.value = id }
+
+    fun saveSeason(id: Long?, name: String, onSuccess: () -> Unit) = write(onSuccess) {
+        selectedSeason.value = container.seasons.save(id, name)
+    }
+
+    fun updateLayout(gameId: Long, positions: List<PlayingPosition>, options: List<PlayingPosition>, onSuccess: () -> Unit) =
+        write(onSuccess) { container.roster.updateLayout(gameId, positions, options) }
 
     fun initializeAttendance(gameId: Long) = write { container.roster.initializeAttendance(gameId) }
 
@@ -215,6 +233,7 @@ class TeamViewModel(private val container: AppContainer) : ViewModel() {
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) { container.backup.restore(validated) }
+                selectedSeason.value = null
                 mutableState.update { it.copy(restorePreview = null, backupMessage = "Backup restored") }
                 onSuccess()
             } catch (error: CancellationException) {

@@ -8,6 +8,8 @@ import kotlinx.coroutines.flow.Flow
 import java.time.LocalDate
 
 class Converters {
+    @TypeConverter fun fieldPositions(value: String): List<PlayingPosition> = PositionCodec.decodeLayout(value)
+    @TypeConverter fun fieldPositionNames(value: List<PlayingPosition>): String = PositionCodec.encodeLayout(value)
     @TypeConverter fun date(value: Long): LocalDate = LocalDate.ofEpochDay(value)
     @TypeConverter fun epochDay(value: LocalDate): Long = value.toEpochDay()
     @TypeConverter fun gameStatus(value: String): GameStatus = GameStatus.valueOf(value)
@@ -17,7 +19,18 @@ class Converters {
     @TypeConverter fun playingState(value: String): PlayingState = PlayingState.valueOf(value)
     @TypeConverter fun playingStateName(value: PlayingState): String = value.name
     @TypeConverter fun position(value: String?): PlayingPosition? = value?.let(PlayingPosition::valueOf)
-    @TypeConverter fun positionName(value: PlayingPosition?): String? = value?.name
+    @TypeConverter fun positionName(value: PlayingPosition?): String? = value?.let(PositionCodec::encode)
+}
+
+@Dao
+interface SeasonDao {
+    @Query("SELECT * FROM seasons ORDER BY createdAt DESC, id DESC") fun observeAll(): Flow<List<Season>>
+    @Query("SELECT * FROM seasons ORDER BY id") suspend fun all(): List<Season>
+    @Query("SELECT * FROM seasons WHERE id = :id") suspend fun get(id: Long): Season?
+    @Insert suspend fun insert(season: Season): Long
+    @Insert suspend fun insert(seasons: List<Season>)
+    @Query("UPDATE seasons SET name = :name WHERE id = :id") suspend fun rename(id: Long, name: String): Int
+    @Query("DELETE FROM seasons") suspend fun deleteAll()
 }
 
 @Dao
@@ -30,8 +43,8 @@ interface PlayerDao {
     suspend fun activePlayers(): List<Player>
     @Insert suspend fun insert(player: Player): Long
     @Insert suspend fun insert(players: List<Player>)
-    @Query("UPDATE players SET firstName = :firstName, lastInitial = :lastInitial WHERE id = :id")
-    suspend fun updateName(id: Long, firstName: String, lastInitial: String): Int
+    @Query("UPDATE players SET firstName = :firstName, lastInitial = :lastInitial, carryFairnessAcrossSeasons = :carryFairnessAcrossSeasons WHERE id = :id")
+    suspend fun updateName(id: Long, firstName: String, lastInitial: String, carryFairnessAcrossSeasons: Boolean = false): Int
     @Query("UPDATE players SET photoPath = :photoPath WHERE id = :id")
     suspend fun updatePhotoPath(id: Long, photoPath: String?): Int
     @Query("UPDATE players SET isActive = :active WHERE id = :id") suspend fun setActive(id: Long, active: Boolean): Int
@@ -40,6 +53,9 @@ interface PlayerDao {
 
 @Dao
 interface GameDao {
+    @Query("SELECT * FROM games ORDER BY createdAt DESC, id DESC LIMIT 1") suspend fun latest(): Game?
+    @Query("SELECT * FROM games WHERE seasonId = :seasonId ORDER BY createdAt DESC, id DESC LIMIT 1") suspend fun latestInSeason(seasonId: Long): Game?
+    @Query("UPDATE games SET fieldPositions = :positions, positionOptions = :options WHERE id = :id") suspend fun updateLayout(id: Long, positions: List<PlayingPosition>, options: List<PlayingPosition>): Int
     @Query("SELECT * FROM games ORDER BY gameDate DESC, roundNumber DESC, id DESC") fun observeAll(): Flow<List<Game>>
     @Query("SELECT * FROM games ORDER BY id") suspend fun all(): List<Game>
     @Query("SELECT * FROM games WHERE id = :id") suspend fun get(id: Long): Game?
@@ -100,14 +116,27 @@ interface RosterDao {
     suspend fun deleteAllAttendance()
 }
 
-@Database(entities = [Player::class, Game::class, GameAttendance::class, Assignment::class], version = 2, exportSchema = true)
+@Database(entities = [Player::class, Season::class, Game::class, GameAttendance::class, Assignment::class], version = 3, exportSchema = true)
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
+    abstract fun seasonDao(): SeasonDao
     abstract fun playerDao(): PlayerDao
     abstract fun gameDao(): GameDao
     abstract fun rosterDao(): RosterDao
 
     companion object {
+        val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS seasons (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, createdAt INTEGER NOT NULL)")
+                db.execSQL("INSERT INTO seasons (id, name, createdAt) SELECT 1, 'Earlier games', 0 WHERE EXISTS (SELECT 1 FROM games)")
+                db.execSQL("ALTER TABLE games ADD COLUMN seasonId INTEGER REFERENCES seasons(id) ON DELETE RESTRICT")
+                db.execSQL("ALTER TABLE games ADD COLUMN fieldPositions TEXT NOT NULL DEFAULT 'STRIKER,LEFT_WING,MID,RIGHT_WING,DEFENDER_1,DEFENDER_2,GOALKEEPER'")
+                db.execSQL("ALTER TABLE games ADD COLUMN positionOptions TEXT NOT NULL DEFAULT 'STRIKER,LEFT_WING,MID,RIGHT_WING,DEFENDER_1,DEFENDER_2,GOALKEEPER'")
+                db.execSQL("ALTER TABLE players ADD COLUMN carryFairnessAcrossSeasons INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("UPDATE games SET seasonId = 1")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_games_seasonId ON games (seasonId)")
+            }
+        }
         val MIGRATION_1_2: Migration = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE players ADD COLUMN photoPath TEXT")

@@ -13,7 +13,7 @@ import kotlin.math.abs
 private fun percent(value: Int, total: Int): Int = if (total == 0) 0 else ((value.toDouble() / total) * 100).toInt()
 
 data class HistoryPlayer(val id: Long, val displayName: String, val isActive: Boolean, val photoPath: String? = null)
-data class HistoryGame(val id: Long, val roundNumber: Int, val gameDate: LocalDate, val status: GameStatus)
+data class HistoryGame(val id: Long, val roundNumber: Int, val gameDate: LocalDate, val status: GameStatus, val fieldPositions: List<PlayingPosition> = FieldPositions, val seasonName: String = "")
 data class HistoryAttendance(val gameId: Long, val playerId: Long, val status: AttendanceStatus)
 data class HistoryAssignment(val gameId: Long, val rotationIndex: Int, val playerId: Long, val playingState: PlayingState, val position: PlayingPosition?)
 
@@ -30,7 +30,9 @@ data class GameHistoryEntry(
     val roundNumber: Int,
     val gameDate: LocalDate,
     val attendance: AttendanceStatus,
-    val rotations: List<HistoryAssignment>
+    val rotations: List<HistoryAssignment>,
+    val seasonName: String = "",
+    val fieldCount: Int = 7
 )
 
 data class PlayerHistorySummary(
@@ -45,13 +47,17 @@ data class PlayerHistorySummary(
     val benchRotationsPerAttendedGame: Double,
     val fairnessStatus: FairnessStatus,
     val nextOpportunities: List<PlayingPosition>,
-    val games: List<GameHistoryEntry>
+    val games: List<GameHistoryEntry>,
+    val eligiblePositions: Set<PlayingPosition> = FieldPositions.toSet(),
+    val expectedActiveRotations: Double = 0.0
 ) {
     val totalRotationOpportunities: Int get() = gamesAttended * ROTATION_COUNT
     val activePercentage: Int get() = percent(activeRotations, totalRotationOpportunities)
     val benchPercentage: Int get() = percent(benchRotations, totalRotationOpportunities)
     val distinctExactPositions: Int get() = exactPositions.count { it.value > 0 }
     val distinctFamilies: Int get() = families.count { it.value > 0 }
+    val eligibleFamilies: Set<PositionFamily> get() = eligiblePositions.map { it.family }.toSet()
+    val opportunityDifferencePerGame: Double get() = if (gamesAttended == 0) 0.0 else (activeRotations - expectedActiveRotations) / gamesAttended
 }
 
 data class TeamPositionBalance(val family: PositionFamily, val min: Int, val max: Int, val label: String)
@@ -80,6 +86,7 @@ class FairnessHistoryCalculator {
         assignments: List<HistoryAssignment>
     ): TeamFairnessSummary {
         val playedGames = games.filter { it.status == GameStatus.PLAYED }.sortedWith(compareBy({ it.gameDate }, { it.roundNumber }, { it.id }))
+        val latestPositions = games.maxWithOrNull(compareBy<HistoryGame>({ it.gameDate }, { it.id }))?.fieldPositions.orEmpty()
         val playedIds = playedGames.map { it.id }.toSet()
         val playedAttendance = attendance.filter { it.gameId in playedIds }
         val availableGamePlayerPairs = playedAttendance
@@ -98,7 +105,17 @@ class FairnessHistoryCalculator {
             val gamesAway = playerAttendance.count { it.status == AttendanceStatus.AWAY }
             val activeRotations = playerAssignments.count { it.playingState == PlayingState.ON_FIELD }
             val benchRotations = playerAssignments.count { it.playingState == PlayingState.BENCH }
-            val exact = FieldPositions.associateWith { position -> playerAssignments.count { it.position == position } }
+            val attended = playedGames.filter { game -> playerAttendance.any { it.gameId == game.id && it.status == AttendanceStatus.AVAILABLE } }
+            val eligible = attended.flatMap { it.fieldPositions }.associateBy { it.name }.values.toSet()
+            val expectedExact = eligible.associateWith { position -> attended.sumOf { game ->
+                val count = playedAttendance.count { it.gameId == game.id && it.status == AttendanceStatus.AVAILABLE }
+                if (game.fieldPositions.any { it.name == position.name } && count > 0) ROTATION_COUNT.toDouble() / count else 0.0
+            } }
+            val expectedActive = attended.sumOf { game ->
+                val count = playedAttendance.count { it.gameId == game.id && it.status == AttendanceStatus.AVAILABLE }
+                if (count > 0) ROTATION_COUNT.toDouble() * game.fieldPositions.size / count else 0.0
+            }
+            val exact = eligible.associateWith { position -> playerAssignments.count { it.position?.name == position.name } }
             val families = PositionFamily.entries.associateWith { family -> playerAssignments.count { it.position?.family == family } }
             val gameRows = playedGames.mapNotNull { game ->
                 val row = playerAttendance.find { it.gameId == game.id } ?: return@mapNotNull null
@@ -107,7 +124,9 @@ class FairnessHistoryCalculator {
                     roundNumber = game.roundNumber,
                     gameDate = game.gameDate,
                     attendance = row.status,
-                    rotations = assignmentsByGamePlayer[game.id to player.id].orEmpty().sortedBy { it.rotationIndex }
+                    rotations = assignmentsByGamePlayer[game.id to player.id].orEmpty().sortedBy { it.rotationIndex },
+                    seasonName = game.seasonName,
+                    fieldCount = game.fieldPositions.size
                 )
             }.sortedWith(compareByDescending<GameHistoryEntry> { it.gameDate }.thenByDescending { it.roundNumber }.thenByDescending { it.gameId })
             PlayerHistorySummary(
@@ -121,8 +140,10 @@ class FairnessHistoryCalculator {
                 activeRotationsPerAttendedGame = rate(activeRotations, gamesAttended),
                 benchRotationsPerAttendedGame = rate(benchRotations, gamesAttended),
                 fairnessStatus = FairnessStatus.NO_HISTORY,
-                nextOpportunities = exactDeficits(activeRotations, exact),
-                games = gameRows
+                nextOpportunities = exactDeficits(activeRotations, exact, expectedExact, latestPositions),
+                games = gameRows,
+                eligiblePositions = eligible,
+                expectedActiveRotations = expectedActive
             )
         }
 
@@ -130,7 +151,7 @@ class FairnessHistoryCalculator {
         val teamActiveRate = activeWithAttendance.map { it.activeRotationsPerAttendedGame }.averageOrZero()
         val teamBenchRate = activeWithAttendance.map { it.benchRotationsPerAttendedGame }.averageOrZero()
         val summaries = preliminary.map { summary ->
-            summary.copy(fairnessStatus = statusFor(summary, teamActiveRate))
+            summary.copy(fairnessStatus = statusFor(summary))
         }
         val active = summaries.filter { it.player.isActive }
         val inactive = summaries.filterNot { it.player.isActive }
@@ -146,19 +167,18 @@ class FairnessHistoryCalculator {
         )
     }
 
-    private fun statusFor(player: PlayerHistorySummary, teamActiveRate: Double): FairnessStatus = when {
+    private fun statusFor(player: PlayerHistorySummary): FairnessStatus = when {
         player.gamesAttended == 0 -> FairnessStatus.NO_HISTORY
         player.gamesAttended < MINIMUM_ATTENDED_GAMES_FOR_LABEL -> FairnessStatus.BUILDING_HISTORY
-        player.activeRotationsPerAttendedGame < teamActiveRate - ACTIVE_RATE_TOLERANCE -> FairnessStatus.NEEDS_OPPORTUNITY
-        player.activeRotationsPerAttendedGame > teamActiveRate + ACTIVE_RATE_TOLERANCE -> FairnessStatus.SLIGHTLY_AHEAD
+        player.opportunityDifferencePerGame < -ACTIVE_RATE_TOLERANCE -> FairnessStatus.NEEDS_OPPORTUNITY
+        player.opportunityDifferencePerGame > ACTIVE_RATE_TOLERANCE -> FairnessStatus.SLIGHTLY_AHEAD
         else -> FairnessStatus.BALANCED
     }
 
-    private fun exactDeficits(activeRotations: Int, counts: Map<PlayingPosition, Int>): List<PlayingPosition> {
+    private fun exactDeficits(activeRotations: Int, counts: Map<PlayingPosition, Int>, expected: Map<PlayingPosition, Double>, latestPositions: List<PlayingPosition>): List<PlayingPosition> {
         if (activeRotations < MINIMUM_ACTIVE_ROTATIONS_FOR_POSITION_INSIGHT) return emptyList()
-        val expected = activeRotations.toDouble() / FieldPositions.size
-        return FieldPositions
-            .map { position -> position to (expected - (counts[position] ?: 0)) }
+        return latestPositions
+            .map { position -> position to ((expected.entries.find { it.key.name == position.name }?.value ?: 0.0) - (counts.entries.find { it.key.name == position.name }?.value ?: 0)) }
             .filter { it.second > POSITION_DEFICIT_TOLERANCE }
             .sortedByDescending { it.second }
             .take(3)
@@ -168,7 +188,7 @@ class FairnessHistoryCalculator {
     private fun teamPositionBalance(activePlayers: List<PlayerHistorySummary>): List<TeamPositionBalance> {
         val players = activePlayers.filter { it.gamesAttended > 0 }
         if (players.isEmpty()) return emptyList()
-        return PositionFamily.entries.map { family ->
+        return players.flatMap { it.eligibleFamilies }.distinct().map { family ->
             val values = players.map { it.families[family] ?: 0 }
             val min = values.minOrNull() ?: 0
             val max = values.maxOrNull() ?: 0

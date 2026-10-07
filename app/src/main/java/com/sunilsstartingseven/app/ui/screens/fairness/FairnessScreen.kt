@@ -74,7 +74,7 @@ private fun FairRotationExplanationCard() {
                 color = Brand.Navy
             )
             Text(
-                "If someone misses a game, future lineups gradually give them more chances to catch up. Only games marked Played count toward future rotations, so saved game-day changes become part of what the app learns from.",
+                "If someone misses a game, future lineups gradually give them more chances to catch up. Only games marked Played count. Each player's fairness uses the game's season, unless Carry fairness across seasons is enabled on their edit page. Position opportunities reflect each game's saved layout.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

@@ -12,12 +12,12 @@ import java.time.LocalDate
 
 class PlayerRepository(private val dao: PlayerDao, private val media: MediaRepository? = null) {
     val players = dao.observeAll()
-    suspend fun save(id: Long?, firstName: String, lastInitial: String) {
+    suspend fun save(id: Long?, firstName: String, lastInitial: String, carryFairnessAcrossSeasons: Boolean = false) {
         require(PlayerInput.validate(firstName, lastInitial).isValid) { "Invalid player name." }
         val first = firstName.trim()
         val initial = PlayerInput.normalizeInitial(lastInitial)
-        if (id == null) dao.insert(Player(firstName = first, lastInitial = initial))
-        else check(dao.updateName(id, first, initial) == 1) { "Player no longer exists." }
+        if (id == null) dao.insert(Player(firstName = first, lastInitial = initial, carryFairnessAcrossSeasons = carryFairnessAcrossSeasons))
+        else check(dao.updateName(id, first, initial, carryFairnessAcrossSeasons) == 1) { "Player no longer exists." }
     }
     suspend fun setActive(id: Long, active: Boolean) {
         check(dao.setActive(id, active) == 1) { "Player no longer exists." }
@@ -26,11 +26,31 @@ class PlayerRepository(private val dao: PlayerDao, private val media: MediaRepos
     suspend fun removePhoto(id: Long) = requireNotNull(media) { "Media storage is not available." }.removePlayerPhoto(id)
 }
 
-class GameRepository(private val dao: GameDao, private val media: MediaRepository? = null) {
+class SeasonRepository(private val dao: SeasonDao) {
+    val seasons = dao.observeAll()
+    suspend fun save(id: Long?, name: String): Long {
+        require(name.trim().isNotEmpty()) { "Enter a season name." }
+        return if (id == null) dao.insert(Season(name = name.trim())) else {
+            check(dao.rename(id, name.trim()) == 1) { "Season no longer exists." }
+            id
+        }
+    }
+}
+
+class GameRepository(private val dao: GameDao, private val media: MediaRepository? = null, private val db: AppDatabase? = null) {
     val games = dao.observeAll()
-    suspend fun createDraft(roundNumber: Int, date: LocalDate, notes: String) {
+    suspend fun createDraft(roundNumber: Int, date: LocalDate, notes: String, seasonId: Long? = null) {
         require(roundNumber > 0) { "Round number must be positive." }
-        dao.insert(Game(roundNumber = roundNumber, gameDate = date, notes = notes.trim()))
+        if (db == null) {
+            dao.insert(Game(roundNumber = roundNumber, gameDate = date, notes = notes.trim(), seasonId = seasonId))
+        } else db.withTransaction {
+            val season = seasonId ?: db.seasonDao().all().maxWithOrNull(compareBy({ it.createdAt }, { it.id }))?.id
+                ?: db.seasonDao().insert(Season(name = "First season"))
+            check(db.seasonDao().get(season) != null) { "Season no longer exists." }
+            val previous = dao.latestInSeason(season) ?: dao.latest()
+            val positions = previous?.fieldPositions ?: PlayingPosition.entries.toList()
+            dao.insert(Game(roundNumber = roundNumber, gameDate = date, notes = notes.trim(), seasonId = season, fieldPositions = positions, positionOptions = previous?.positionOptions ?: PlayingPosition.entries.toList()))
+        }
     }
     suspend fun updateDraft(id: Long, roundNumber: Int, date: LocalDate, notes: String) {
         require(roundNumber > 0) { "Round number must be positive." }
@@ -66,6 +86,20 @@ class RosterRepository(private val db: AppDatabase, private val engine: FairRota
     val attendance = roster.observeAllAttendanceWithPlayers()
     val assignments = roster.observeAllAssignmentsWithPlayers()
 
+    suspend fun updateLayout(gameId: Long, positions: List<PlayingPosition>, options: List<PlayingPosition>? = null) = db.withTransaction {
+        val game = games.get(gameId) ?: error("Game no longer exists.")
+        check(game.status == GameStatus.DRAFT || game.status == GameStatus.READY) { "Only draft or ready games can change layout." }
+        validateLayout(positions)
+        val mergedOptions = (PlayingPosition.entries + (options ?: game.positionOptions) + positions).associateBy { it.name }.values.toList()
+        require(mergedOptions.size <= 40) { "Up to 40 position options are supported per game." }
+        mergedOptions.forEach { PositionCodec.decode(PositionCodec.encode(it)) }
+        val layoutChanged = PositionCodec.encodeLayout(game.fieldPositions) != PositionCodec.encodeLayout(positions)
+        if (!layoutChanged && PositionCodec.encodeLayout(game.positionOptions) == PositionCodec.encodeLayout(mergedOptions)) return@withTransaction
+        if (layoutChanged) roster.deleteAssignmentsForGame(gameId)
+        games.updateLayout(gameId, positions, mergedOptions)
+        if (layoutChanged) games.updateStatus(gameId, GameStatus.DRAFT)
+    }
+
     suspend fun initializeAttendance(gameId: Long) = db.withTransaction {
         val game = games.get(gameId) ?: error("Game no longer exists.")
         if (game.status == GameStatus.PLAYED) return@withTransaction
@@ -99,16 +133,19 @@ class RosterRepository(private val db: AppDatabase, private val engine: FairRota
         val attendanceRows = roster.getAttendanceWithPlayers(gameId)
         val available = attendanceRows.filter { it.attendance.status == AttendanceStatus.AVAILABLE }
         val away = attendanceRows.filter { it.attendance.status == AttendanceStatus.AWAY }.map { it.player.id }.toSet()
-        require(available.size >= 7) { "At least seven playing players are required." }
+        require(available.size >= game.fieldPositions.size) { "Not enough playing players for this layout." }
+        val carryPlayerIds = players.all().filter { it.carryFairnessAcrossSeasons }.map { it.id }.toSet()
+        val seasonGameIds = games.all().filter { it.seasonId == game.seasonId }.map { it.id }.toSet()
         val result = engine.generate(
             RotationRequest(
                 availablePlayers = available.map { RotationPlayer(it.player.id, it.player.displayName) },
                 awayPlayerIds = away,
-                history = roster.playedAssignments().map { HistoricalAssignment(it.playerId, it.playingState, it.position) },
-                seed = game.roundNumber * 31 + game.id.toInt()
+                history = roster.playedAssignments().filter { it.gameId in seasonGameIds || it.playerId in carryPlayerIds }.map { HistoricalAssignment(it.playerId, it.playingState, it.position) },
+                seed = game.roundNumber * 31 + game.id.toInt(),
+                fieldPositions = game.fieldPositions
             )
         )
-        val validation = validator.validate(result.assignments, available.map { it.player.id }.toSet(), away)
+        val validation = validator.validate(result.assignments, available.map { it.player.id }.toSet(), away, game.fieldPositions)
         check(validation.valid) { validation.errors.joinToString("; ") }
         roster.deleteAssignmentsForGame(gameId)
         roster.insertAssignments(result.assignments.map { Assignment(gameId, it.rotationIndex, it.playerId, it.playingState, it.position) })
@@ -122,7 +159,7 @@ class RosterRepository(private val db: AppDatabase, private val engine: FairRota
         val available = attendanceRows.filter { it.status == AttendanceStatus.AVAILABLE }.map { it.playerId }.toSet()
         val away = attendanceRows.filter { it.status == AttendanceStatus.AWAY }.map { it.playerId }.toSet()
         val current = roster.getAssignments(gameId).map { RotationAssignment(it.playerId, it.rotationIndex, it.playingState, it.position) }
-        val validation = validator.validate(current, available, away)
+        val validation = structuralValidator.validate(current, available, away, game.fieldPositions)
         check(validation.valid) { validation.errors.joinToString("; ") }
         check(games.updateStatus(gameId, GameStatus.PLAYED) == 1) { "Game no longer exists." }
     }
@@ -133,7 +170,7 @@ class RosterRepository(private val db: AppDatabase, private val engine: FairRota
         val attendanceRows = roster.getAttendance(gameId)
         val available = attendanceRows.filter { it.status == AttendanceStatus.AVAILABLE }.map { it.playerId }.toSet()
         val away = attendanceRows.filter { it.status == AttendanceStatus.AWAY }.map { it.playerId }.toSet()
-        val validation = structuralValidator.validate(pending, available, away)
+        val validation = structuralValidator.validate(pending, available, away, game.fieldPositions)
         check(validation.valid) { validation.errors.joinToString(" ") }
         roster.deleteAssignmentsForGame(gameId)
         roster.insertAssignments(pending.map { Assignment(gameId, it.rotationIndex, it.playerId, it.playingState, it.position) })

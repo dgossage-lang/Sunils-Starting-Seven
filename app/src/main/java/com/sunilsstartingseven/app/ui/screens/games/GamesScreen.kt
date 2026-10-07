@@ -28,7 +28,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 
 @Composable
-fun GamesScreen(games: List<Game>, summaries: Map<Long, AttendanceSummary>, onNew: () -> Unit, onOpen: (Game) -> Unit) {
+fun GamesScreen(games: List<Game>, summaries: Map<Long, AttendanceSummary>, onNew: () -> Unit, seasonNames: Map<Long, String> = emptyMap(), onOpen: (Game) -> Unit) {
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(Space.Large), verticalArrangement = Arrangement.spacedBy(Space.Normal)) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(Space.Small)) {
@@ -38,12 +38,12 @@ fun GamesScreen(games: List<Game>, summaries: Map<Long, AttendanceSummary>, onNe
         }
         item { PrimaryAction("New Game", onNew, Modifier.fillMaxWidth()) }
         if (games.isEmpty()) item { EmptyCard("No games yet", "Create your first draft. Your game details will be saved on this device.", "Create Game", onNew) }
-        items(games, key = { it.id }) { GameCard(it, summaries[it.id]) { onOpen(it) } }
+        items(games, key = { it.id }) { GameCard(it, summaries[it.id], seasonName = seasonNames[it.seasonId]) { onOpen(it) } }
     }
 }
 
 @Composable
-fun GameCard(game: Game, summary: AttendanceSummary? = null, onClick: (() -> Unit)? = null) {
+fun GameCard(game: Game, summary: AttendanceSummary? = null, seasonName: String? = null, onClick: (() -> Unit)? = null) {
     val context = LocalContext.current
     val bitmap = remember(game.photoPath) {
         game.photoPath?.let { path -> runCatching { BitmapFactory.decodeFile(java.io.File(context.filesDir, path).absolutePath)?.asImageBitmap() }.getOrNull() }
@@ -66,17 +66,18 @@ fun GameCard(game: Game, summary: AttendanceSummary? = null, onClick: (() -> Uni
                     Modifier.size(width = 82.dp, height = 72.dp).clip(MaterialTheme.shapes.medium),
                     contentScale = ContentScale.Crop
                 )
-                GameCardDetails(game, summary, Modifier.weight(1f), stackedSummary = true)
+                GameCardDetails(game, summary, Modifier.weight(1f), stackedSummary = true, seasonName = seasonName)
             }
         } else {
-            GameCardDetails(game, summary, Modifier.padding(Space.Large), stackedSummary = false)
+            GameCardDetails(game, summary, Modifier.padding(Space.Large), stackedSummary = false, seasonName = seasonName)
         }
     }
 }
 
 @Composable
-private fun GameCardDetails(game: Game, summary: AttendanceSummary?, modifier: Modifier = Modifier, stackedSummary: Boolean = false) {
+private fun GameCardDetails(game: Game, summary: AttendanceSummary?, modifier: Modifier = Modifier, stackedSummary: Boolean = false, seasonName: String? = null) {
     Column(modifier, verticalArrangement = Arrangement.spacedBy(Space.Small)) {
+        seasonName?.let { Text(it, style = MaterialTheme.typography.labelMedium) }
         Text("Round ${game.roundNumber}", style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(game.gameDate.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM)), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         val summaryContent: @Composable () -> Unit = {
@@ -91,6 +92,7 @@ private fun GameCardDetails(game: Game, summary: AttendanceSummary?, modifier: M
         }
         if (stackedSummary) Column(verticalArrangement = Arrangement.spacedBy(Space.Tiny)) { summaryContent() }
         else Row(horizontalArrangement = Arrangement.spacedBy(Space.Small)) { summaryContent() }
+        Text("${game.fieldPositions.size} on field · ${summary?.expectedBench ?: 0} on bench", style = MaterialTheme.typography.bodySmall)
         if (game.notes.isNotBlank()) Text(game.notes, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
     }
 }

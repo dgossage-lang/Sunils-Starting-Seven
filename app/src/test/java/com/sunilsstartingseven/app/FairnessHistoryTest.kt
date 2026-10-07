@@ -73,21 +73,23 @@ class FairnessHistoryTest {
 
     @Test fun fairnessUsesAttendanceNormalisedPlayingRate() {
         val games = (1..10).map { game(it.toLong(), GameStatus.PLAYED) }
-        val attendance = games.flatMap { playedGame ->
-            buildList {
-                add(HistoryAttendance(playedGame.id, 1, AttendanceStatus.AVAILABLE))
-                add(HistoryAttendance(playedGame.id, 2, if (playedGame.id <= 5) AttendanceStatus.AVAILABLE else AttendanceStatus.AWAY))
-            }
+        val attendance = games.flatMap { g -> (1..9).map { id ->
+            HistoryAttendance(g.id, id.toLong(), if (id == 2 && g.id > 5) AttendanceStatus.AWAY else AttendanceStatus.AVAILABLE)
+        } }
+        val history = mutableListOf<com.sunilsstartingseven.app.domain.rotation.HistoricalAssignment>()
+        val assignments = games.flatMap { g ->
+            val available = attendance.filter { it.gameId == g.id && it.status == AttendanceStatus.AVAILABLE }
+            val result = com.sunilsstartingseven.app.domain.rotation.FairRotationEngine().generate(
+                com.sunilsstartingseven.app.domain.rotation.RotationRequest(available.map { com.sunilsstartingseven.app.domain.rotation.RotationPlayer(it.playerId) }, history = history.toList(), seed = g.id.toInt()))
+            history += result.assignments.map { com.sunilsstartingseven.app.domain.rotation.HistoricalAssignment(it.playerId, it.playingState, it.position) }
+            result.assignments.map { HistoryAssignment(g.id, it.rotationIndex, it.playerId, it.playingState, it.position) }
         }
-        val assignments = buildList {
-            repeat(10) { index -> add(assignment(index + 1L, 1, 0, if (index % 2 == 0) PlayingPosition.GOALKEEPER else null)) }
-            repeat(5) { index -> add(assignment(index + 1L, 2, 0, if (index % 2 == 0) PlayingPosition.MID else null)) }
-        }
-
-        val summary = calculator.calculate(players(2), games, attendance, assignments)
-
-        assertEquals(0.5, summary.player(1)!!.activeRotationsPerAttendedGame, 0.01)
-        assertEquals(0.6, summary.player(2)!!.activeRotationsPerAttendedGame, 0.01)
+        val summary = calculator.calculate(players(9), games, attendance, assignments)
+        assertEquals(10, summary.player(1)!!.gamesAttended)
+        assertEquals(5, summary.player(2)!!.gamesAttended)
+        assertEquals(5, summary.player(2)!!.gamesAway)
+        assertEquals(5 * 28.0 / 9 + 5 * 28.0 / 8, summary.player(1)!!.expectedActiveRotations, .001)
+        assertEquals(5 * 28.0 / 9, summary.player(2)!!.expectedActiveRotations, .001)
         assertEquals(FairnessStatus.BALANCED, summary.player(1)!!.fairnessStatus)
         assertEquals(FairnessStatus.BALANCED, summary.player(2)!!.fairnessStatus)
     }

@@ -8,7 +8,6 @@ import com.sunilsstartingseven.app.data.preferences.PreferenceRepository
 import com.sunilsstartingseven.app.data.repository.DevelopmentSeedRepository
 import com.sunilsstartingseven.app.domain.model.*
 import com.sunilsstartingseven.app.domain.rotation.RotationAssignment
-import com.sunilsstartingseven.app.domain.rotation.RotationValidator
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -27,17 +26,18 @@ class BackupRepository(
     private val validator: BackupValidator = BackupValidator()
 ) {
     suspend fun createBackup(createdAt: OffsetDateTime = OffsetDateTime.now()): SunilsStartingSevenBackup =
-        SunilsStartingSevenBackup(
+        db.withTransaction { SunilsStartingSevenBackup(
             format = BACKUP_FORMAT,
             backupVersion = BACKUP_VERSION,
             createdAt = createdAt.toString(),
             appVersion = BuildConfig.VERSION_NAME,
             databaseSchemaVersion = BACKUP_SCHEMA_VERSION,
-            players = db.playerDao().all().map { BackupPlayerDto(it.id, it.firstName, it.lastInitial, it.isActive, it.createdAt, it.photoPath) },
-            games = db.gameDao().all().map { BackupGameDto(it.id, it.roundNumber, it.gameDate.toString(), it.status.name, it.notes, it.createdAt, it.photoPath) },
+            seasons = db.seasonDao().all().map { BackupSeasonDto(it.id, it.name, it.createdAt) },
+            players = db.playerDao().all().map { BackupPlayerDto(it.id, it.firstName, it.lastInitial, it.isActive, it.createdAt, it.photoPath, it.carryFairnessAcrossSeasons) },
+            games = db.gameDao().all().map { BackupGameDto(it.id, it.roundNumber, it.gameDate.toString(), it.status.name, it.notes, it.createdAt, it.photoPath, it.seasonId, it.fieldPositions.map(PositionCodec::encode), it.positionOptions.map(PositionCodec::encode)) },
             attendance = db.rosterDao().allAttendance().map { BackupAttendanceDto(it.gameId, it.playerId, it.status.name) },
-            assignments = db.rosterDao().allAssignments().map { BackupAssignmentDto(it.gameId, it.rotationIndex, it.playerId, it.playingState.name, it.position?.name) }
-        )
+            assignments = db.rosterDao().allAssignments().map { BackupAssignmentDto(it.gameId, it.rotationIndex, it.playerId, it.playingState.name, it.position?.let(PositionCodec::encode)) }
+        ) }
 
     suspend fun createBackupJson(): String = codec.encode(createBackup())
 
@@ -83,9 +83,11 @@ class BackupRepository(
             db.rosterDao().deleteAllAssignments()
             db.rosterDao().deleteAllAttendance()
             db.gameDao().deleteAll()
+            db.seasonDao().deleteAll()
+            db.seasonDao().insert(backup.seasons.map { Season(it.id, it.name, it.createdAt) })
             db.playerDao().deleteAll()
-            db.playerDao().insert(backup.players.map { Player(it.id, it.firstName, it.lastInitial, it.isActive, it.createdAt, it.photoPath) })
-            db.gameDao().insert(backup.games.map { Game(it.id, it.roundNumber, LocalDate.parse(it.gameDate), GameStatus.valueOf(it.status), it.notes, it.createdAt, it.photoPath) })
+            db.playerDao().insert(backup.players.map { Player(it.id, it.firstName, it.lastInitial, it.isActive, it.createdAt, it.photoPath, it.carryFairnessAcrossSeasons) })
+            db.gameDao().insert(backup.games.map { Game(it.id, it.roundNumber, LocalDate.parse(it.gameDate), GameStatus.valueOf(it.status), it.notes, it.createdAt, it.photoPath, it.seasonId, it.fieldPositions.map(PlayingPosition::valueOf), it.positionOptions.map(PlayingPosition::valueOf)) })
             db.rosterDao().insertAttendance(backup.attendance.map { GameAttendance(it.gameId, it.playerId, AttendanceStatus.valueOf(it.status)) })
             db.rosterDao().insertAssignments(backup.assignments.map { Assignment(it.gameId, it.rotationIndex, it.playerId, PlayingState.valueOf(it.playingState), it.position?.let(PlayingPosition::valueOf)) })
         }
@@ -148,15 +150,17 @@ class BackupRepository(
     ) else this
 }
 
-class BackupValidator(private val rosterValidator: RotationValidator = RotationValidator()) {
+class BackupValidator {
     fun validate(backup: SunilsStartingSevenBackup, mediaPaths: Set<String> = emptySet()) {
         if (backup.format != BACKUP_FORMAT) throw BackupException("This doesn't appear to be a Sunil's Starting Seven backup.")
         if (backup.backupVersion > BACKUP_VERSION) throw BackupException("This backup was created by a newer backup format and can't be restored by this version of the app.")
         if (backup.backupVersion !in 1..BACKUP_VERSION) throw BackupException("This backup format is not supported.")
-        val expectedSchema = if (backup.backupVersion == 1) 1 else BACKUP_SCHEMA_VERSION
+        val expectedSchema = backup.backupVersion
         if (backup.databaseSchemaVersion != expectedSchema) throw BackupException("This backup uses an unsupported database schema.")
         runCatching { OffsetDateTime.parse(backup.createdAt) }.getOrElse { throw BackupException("Backup has an invalid createdAt timestamp.") }
 
+        val seasonIds = uniqueIds(backup.seasons.map { it.id }, "season")
+        backup.seasons.forEach { if (it.id <= 0 || it.name.isBlank()) throw BackupException("Backup contains an invalid season.") }
         val playerIds = uniqueIds(backup.players.map { it.id }, "player")
         backup.players.forEach { player ->
             if (player.id <= 0) throw BackupException("Backup contains an invalid player ID.")
@@ -167,6 +171,11 @@ class BackupValidator(private val rosterValidator: RotationValidator = RotationV
         val gameIds = uniqueIds(backup.games.map { it.id }, "game")
         backup.games.forEach { game ->
             if (game.id <= 0 || game.roundNumber <= 0) throw BackupException("Backup contains an invalid game.")
+            if (game.seasonId != null && game.seasonId !in seasonIds) throw BackupException("Backup references a missing season.")
+            val positions = game.fieldPositions.map(::parsePosition)
+            val options = game.positionOptions.map(::parsePosition)
+            if (options.size > 40 || options.map { it.name }.distinct().size != options.size || positions.any { p -> options.none { it.name == p.name && PositionCodec.encode(it) == PositionCodec.encode(p) } }) throw BackupException("Backup contains invalid position options.")
+            try { validateLayout(positions) } catch (_: Exception) { throw BackupException("Backup contains an invalid pitch layout.") }
             parseGameStatus(game.status)
             runCatching { LocalDate.parse(game.gameDate) }.getOrElse { throw BackupException("Backup contains an invalid game date.") }
             validateMediaPath(game.photoPath, "games", mediaPaths)
@@ -185,6 +194,7 @@ class BackupValidator(private val rosterValidator: RotationValidator = RotationV
             if (row.rotationIndex !in 0..3) throw BackupException("Backup contains an invalid rotation index.")
             val state = parsePlayingState(row.playingState)
             val position = row.position?.let(::parsePosition)
+            if (position != null && backup.games.single { it.id == row.gameId }.fieldPositions.none { it == PositionCodec.encode(position) }) throw BackupException("Backup assignment references a position outside its game layout.")
             if ((state == PlayingState.ON_FIELD) != (position != null)) throw BackupException("Backup contains an invalid assignment state.")
             if (!assignmentKeys.add(Triple(row.gameId, row.rotationIndex, row.playerId))) throw BackupException("Backup contains duplicate assignments.")
         }
@@ -205,7 +215,7 @@ class BackupValidator(private val rosterValidator: RotationValidator = RotationV
             if (assignmentsByGame[game.id].orEmpty().isEmpty()) return@forEach
             val away = attendanceByGame[game.id].orEmpty().filter { parseAttendanceStatus(it.status) == AttendanceStatus.AWAY }.map { it.playerId }.toSet()
             val rows = assignmentsByGame[game.id].orEmpty().map { RotationAssignment(it.playerId, it.rotationIndex, parsePlayingState(it.playingState), it.position?.let(::parsePosition)) }
-            val validation = rosterValidator.validate(rows, available, away)
+            val validation = com.sunilsstartingseven.app.domain.rotation.StructuralRosterValidator().validate(rows, available, away, game.fieldPositions.map(::parsePosition))
             if (!validation.valid) throw BackupException(validation.errors.joinToString(" "))
         }
     }

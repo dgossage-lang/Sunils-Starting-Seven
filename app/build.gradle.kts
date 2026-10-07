@@ -14,8 +14,8 @@ android {
         applicationId = "com.sunilsstartingseven.app"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10
-        versionName = "1.0.0"
+        versionCode = 20
+        versionName = "2.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true; buildConfig = true }

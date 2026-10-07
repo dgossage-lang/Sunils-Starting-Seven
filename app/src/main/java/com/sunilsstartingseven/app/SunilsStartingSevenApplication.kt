@@ -17,11 +17,12 @@ class SunilsStartingSevenApplication : Application() {
 
 class AppContainer(context: Context) {
     val database = Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "starting-seven.db")
-        .addMigrations(AppDatabase.MIGRATION_1_2)
+        .addMigrations(AppDatabase.MIGRATION_1_2, AppDatabase.MIGRATION_2_3)
         .build()
     val media = MediaRepository(context.applicationContext, database)
     val players = PlayerRepository(database.playerDao(), media)
-    val games = GameRepository(database.gameDao(), media)
+    val seasons = com.sunilsstartingseven.app.data.repository.SeasonRepository(database.seasonDao())
+    val games = GameRepository(database.gameDao(), media, database)
     val roster = RosterRepository(database)
     val preferences = PreferenceRepository(context)
     val backup = BackupRepository(database, preferences, media)
